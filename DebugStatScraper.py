@@ -67,33 +67,28 @@ def scrape_maps_and_scorelines(url):
     player_stats = []
     agents_col = []
 
-    try:
-        team1_name = soup.select_one('.match-header-link.mod-1 .match-header-link-name .wf-title-med').get_text(strip=True)
-        team2_name = soup.select_one('.match-header-link.mod-2 .match-header-link-name .wf-title-med').get_text(strip=True)
+    team1_name = soup.select_one('.wf-title-med:nth-of-type(1)').get_text(strip=True)
+    team2_name = soup.select_one('.wf-title-med:nth-of-type(2)').get_text(strip=True)
+    team1_score = int(soup.select('.js-spoiler .match-header-vs-score')[0].get_text(strip=True))
+    team2_score = int(soup.select('.js-spoiler .match-header-vs-score')[1].get_text(strip=True))
 
-        scores = soup.select('.match-header-vs-score .js-spoiler .match-header-vs-score-winner, .match-header-vs-score .js-spoiler .match-header-vs-score-loser')
-        team1_score = int(scores[0].get_text(strip=True)) if scores else 0
-        team2_score = int(scores[1].get_text(strip=True)) if len(scores) > 1 else 0
+    map_elements = soup.select('.vm-stats-gamesnav-item:not(.mod-disabled)')
 
-        map_elements = soup.select('.vm-stats-gamesnav-item:not(.mod-disabled)')
-        for map_element in map_elements:
-            game_id = map_element['data-game-id']
-            map_name = map_element.get_text(strip=True)
-            if game_id != "all":  # Skip the 'All Maps' button
-                team_scores = soup.select(f'.vm-stats-game[data-game-id="{game_id}"] .score')
-                scoreline = ' - '.join([score.get_text(strip=True) for score in team_scores])
-                maps_and_scorelines.append((map_name, scoreline, game_id))
+    for map_element in map_elements:
+        game_id = map_element['data-game-id']
+        map_name = map_element.get_text(strip=True)
+        if game_id != "all":  # Skip the 'All Maps' button
+            team_scores = soup.select(f'.vm-stats-game[data-game-id="{game_id}"] .score')
+            scoreline = ' - '.join([score.get_text(strip=True) for score in team_scores])
+            maps_and_scorelines.append((map_name, scoreline, game_id))
 
-        table_data, agents = scrape_page(url)
-        if table_data:
-            for line, agent in zip(table_data, agents):
-                if line and line[0]:
-                    parsed_data = parse_player_data(line, agent)
-                    player_stats.append(parsed_data)
-                    agents_col.append(agent)
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    table_data, agents = scrape_page(url)
+    if table_data:
+        for line, agent in zip(table_data, agents):
+            if line and line[0]:
+                parsed_data = parse_player_data(line, agent)
+                player_stats.append(parsed_data)
+                agents_col.append(agent)
 
     return team1_name, team2_name, team1_score, team2_score, maps_and_scorelines, player_stats, agents_col
 
