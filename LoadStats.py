@@ -99,7 +99,7 @@ def scrape_maps_and_scorelines(url):
 
 
 def main():
-    url = 'https://www.vlr.gg/314634'
+    url = 'https://www.vlr.gg/348468'
 
     team1_name, team2_name, team1_score, team2_score, maps, player_stats, agents_col = scrape_maps_and_scorelines(url)
 
@@ -111,9 +111,29 @@ def main():
         team1_map_score, team2_map_score = scoreline.split(' - ')
         print(f"{map_name} {team1_name} {team1_map_score} - {team2_name} {team2_map_score}")
 
-    print("Player Stats:")
-    for player in player_stats:
-        print(player)
+    print("\nPlayer Stats by Map:")
+    num_maps = len(maps)
+    map_stats = [[] for _ in range(num_maps + 1)]  # +1 for combined stats
+
+    for i, player in enumerate(player_stats):
+        # The first block is Map 1, the second block is combined stats, and so on
+        block_size = len(player_stats) // (num_maps + 1)
+        if i < block_size:
+            map_stats[0].append(player)  # Map 1
+        elif i < 2 * block_size:
+            map_stats[1].append(player)  # All Maps Combined
+        else:
+            map_stats[i // block_size].append(player)  # Subsequent Maps
+
+    for idx, map_stat in enumerate(map_stats):
+        if idx == 0:
+            print("\nMap 1:")
+        elif idx == 1:
+            print("\nCombined Stats:")
+        else:
+            print(f"\nMap {idx}:")
+        for player in map_stat:
+            print(player)
 
 
 if __name__ == "__main__":
