@@ -4,14 +4,6 @@ from bs4 import BeautifulSoup
 from db_init import setup_database
 
 
-# Function to calculate team stats
-def calculate_team_stats(player_stats, total_rounds):
-    total_kills = sum([player['kills'] for player in player_stats])
-    avg_kpr = total_kills / total_rounds if total_rounds > 0 else 0
-    avg_kpg = total_kills / len(player_stats) if len(player_stats) > 0 else 0
-    return avg_kpr, avg_kpg
-
-
 # Function to scrape player stats
 def scrape_page(url):
     response = requests.get(url)
@@ -117,9 +109,9 @@ def scrape_maps_and_scorelines(url):
 # Database insertion functions
 def insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, match_stat_ids):
     cursor.execute('''
-    INSERT INTO Matches (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, p1_stat_id,
-                         p2_stat_id, p3_stat_id, p4_stat_id, p5_stat_id, p6_stat_id, p7_stat_id, p8_stat_id,
-                         p9_stat_id, p10_stat_id)
+    INSERT INTO Matches (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id,
+                         p1_stat_id, p2_stat_id, p3_stat_id, p4_stat_id, p5_stat_id,
+                         p6_stat_id, p7_stat_id, p8_stat_id, p9_stat_id, p10_stat_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, *match_stat_ids))
     return cursor.lastrowid
@@ -127,20 +119,23 @@ def insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_
 
 def insert_map(cursor, match_id, map_name, team1_name, team2_name, team1_score, team2_score, map_stat_ids):
     cursor.execute('''
-    INSERT INTO Maps (match_id, map_name, team1_name, team2_name, team1_score, team2_score, p1_stat_id, p2_stat_id,
-                      p3_stat_id, p4_stat_id, p5_stat_id, p6_stat_id, p7_stat_id, p8_stat_id, p9_stat_id, p10_stat_id)
+    INSERT INTO Maps (match_id, map_name, team1_name, team2_name, team1_score, team2_score,
+                      p1_stat_id, p2_stat_id, p3_stat_id, p4_stat_id, p5_stat_id,
+                      p6_stat_id, p7_stat_id, p8_stat_id, p9_stat_id, p10_stat_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (match_id, map_name, team1_name, team2_name, team1_score, team2_score, *map_stat_ids))
     return cursor.lastrowid
 
 
 def get_or_insert_player(cursor, player_name, team_name):
-    cursor.execute('SELECT player_id FROM Players WHERE player_name = ? AND team_name = ?', (player_name, team_name))
+    cursor.execute('SELECT player_id FROM Players WHERE player_name = ?', (player_name,))
     result = cursor.fetchone()
     if result is None:
         cursor.execute('INSERT INTO Players (player_name, team_name) VALUES (?, ?)', (player_name, team_name))
         return cursor.lastrowid
     else:
+        # Update team name if different
+        cursor.execute('UPDATE Players SET team_name = ? WHERE player_id = ?', (team_name, result[0]))
         return result[0]
 
 
@@ -153,6 +148,7 @@ def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
           player_stats['acs'], player_stats['rating'], player_stats['agent'], player_stats['plus_minus'],
           player_stats['kast'], player_stats['adr'], player_stats['hs_percentage'], player_stats['fk'],
           player_stats['fd'], player_stats['f_plus_minus']))
+    return cursor.lastrowid
 
 
 def insert_team(cursor, team_name, player_ids):
@@ -170,44 +166,115 @@ def process_match(url, cursor):
     # Scrape match data
     team1_name, team2_name, team1_score, team2_score, maps, player_stats, agents_col = scrape_maps_and_scorelines(url)
 
-    total_rounds = sum([int(score.split(' - ')[0]) + int(score.split(' - ')[1]) for _, score, _ in maps])
+    # Extract team names from the first 10 player stats entries (short-form team names)
+    team_names = {player_stats[i]['team'] for i in range(10)}
+    if len(team_names) != 2:
+        print("Error: Could not determine team names from player stats.")
+        return
+    short_team1_name, short_team2_name = team_names
 
-    # Insert player stats and store their stat_ids
-    player_stat_ids = []
-    for i, player in enumerate(player_stats):
-        # Assign correct map IDs (1, 2, or 3)
-        map_id = (i // 10) + 1
-        if map_id > len(maps):
-            map_id = -1  # Assign -1 for full match statistics
-        player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
-        stat_id = insert_player_stats(cursor, player_id, None, map_id, player)  # Temporarily setting match_id as None
-        player_stat_ids.append(stat_id)
+    # Map full team names to short team names
+    team_name_mapping = {}
+    for name in [team1_name, team2_name]:
+        if name.startswith(short_team1_name) or short_team1_name.startswith(name):
+            team_name_mapping[name] = short_team1_name
+        elif name.startswith(short_team2_name) or short_team2_name.startswith(name):
+            team_name_mapping[name] = short_team2_name
+        else:
+            team_name_mapping[name] = name  # Fallback to full name if no match
 
-    # Split player_stat_ids for maps and match totals
-    match_stat_ids = player_stat_ids[:10]
-    map1_stat_ids = player_stat_ids[:10]
-    map2_stat_ids = player_stat_ids[10:20] if len(player_stat_ids) >= 20 else []
-    map3_stat_ids = player_stat_ids[20:30] if len(player_stat_ids) >= 30 else []
+    # Update player team names to short form
+    for player in player_stats:
+        full_team_name = player['team']
+        player['team'] = team_name_mapping.get(full_team_name, full_team_name)
 
-    # Insert match and get match_id
-    match_id = insert_match(cursor, team1_name, team2_name, team1_score, team2_score, None, None, None, match_stat_ids)
+    # Insert match with placeholder map IDs and player stat IDs (will update later)
+    placeholder_map_ids = [None, None, None]
+    placeholder_stat_ids = [None] * 10  # Assuming 10 players in total
+    match_id = insert_match(cursor, team1_name, team2_name, team1_score, team2_score,
+                            *placeholder_map_ids, placeholder_stat_ids)
 
     # Insert maps and get map_ids
     map_ids = []
+    map_stat_ids_list = []  # To store player stat IDs per map
+
+    # Adjust the order of stats: Map 1 stats, match totals, Map 2 stats, Map 3 stats
+    stats_per_map = 10
+    total_maps = len(maps)
+    total_stats = len(player_stats)
+    match_totals_index = stats_per_map  # After the first map
+
+    # Collect match total stats
+    match_total_stats = player_stats[match_totals_index:match_totals_index + stats_per_map]
+    match_stat_ids = []
+    for player in match_total_stats:
+        player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
+        stat_id = insert_player_stats(cursor, player_id, match_id, None, player)  # No map_id for match totals
+        match_stat_ids.append(stat_id)
+
+    # Now process each map
+    current_index = 0
     for i, (map_name, scoreline, game_id) in enumerate(maps):
         team1_map_score, team2_map_score = map(int, scoreline.split(' - '))
-        map_stat_ids = map1_stat_ids if i == 0 else map2_stat_ids if i == 1 else map3_stat_ids
+
+        # Skip match totals after the first map
+        if i == 0:
+            map_player_stats = player_stats[current_index:current_index + stats_per_map]
+            current_index += stats_per_map + stats_per_map  # Skip over match totals
+        else:
+            map_player_stats = player_stats[current_index:current_index + stats_per_map]
+            current_index += stats_per_map
+
+        map_stat_ids = []
+        for player in map_player_stats:
+            player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
+            stat_id = insert_player_stats(cursor, player_id, match_id, None,
+                                          player)  # Map ID will be set after map insertion
+            map_stat_ids.append(stat_id)
+
+        # Insert the map with placeholder stat IDs (will update later)
+        placeholder_stat_ids = [None] * 10
         map_id = insert_map(cursor, match_id, map_name, team1_name, team2_name, team1_map_score, team2_map_score,
-                            map_stat_ids)
+                            placeholder_stat_ids)
         map_ids.append(map_id)
+        map_stat_ids_list.append((map_id, map_stat_ids))
 
-    # Update match with map IDs
-    cursor.execute('UPDATE Matches SET map1_id = ?, map2_id = ?, map3_id = ? WHERE match_id = ?', (*map_ids, match_id))
+    # Now update the player stats with correct map IDs
+    for map_id, stat_ids in map_stat_ids_list:
+        for stat_id in stat_ids:
+            cursor.execute('UPDATE Player_Stats SET map_id = ? WHERE stat_id = ?', (map_id, stat_id))
 
-    # Insert teams
-    team1_player_ids = [get_or_insert_player(cursor, player['player_name'], team1_name) for player in player_stats[:5]]
-    team2_player_ids = [get_or_insert_player(cursor, player['player_name'], team2_name) for player in
-                        player_stats[5:10]]
+    # Update the maps with player stat IDs
+    for idx, (map_id, stat_ids) in enumerate(map_stat_ids_list):
+        cursor.execute('''
+        UPDATE Maps SET p1_stat_id = ?, p2_stat_id = ?, p3_stat_id = ?, p4_stat_id = ?, p5_stat_id = ?,
+                        p6_stat_id = ?, p7_stat_id = ?, p8_stat_id = ?, p9_stat_id = ?, p10_stat_id = ?
+        WHERE map_id = ?
+        ''', (*stat_ids, map_id))
+
+    # Update the match with map IDs
+    map_ids_to_update = map_ids + [None] * (3 - len(map_ids))  # Ensure there are three map IDs
+    cursor.execute('UPDATE Matches SET map1_id = ?, map2_id = ?, map3_id = ? WHERE match_id = ?',
+                   (*map_ids_to_update, match_id))
+
+    # Update the match with player stat IDs
+    cursor.execute('''
+    UPDATE Matches SET p1_stat_id = ?, p2_stat_id = ?, p3_stat_id = ?, p4_stat_id = ?, p5_stat_id = ?,
+                       p6_stat_id = ?, p7_stat_id = ?, p8_stat_id = ?, p9_stat_id = ?, p10_stat_id = ?
+    WHERE match_id = ?
+    ''', (*match_stat_ids, match_id))
+
+    # Insert teams using the first 10 players (short-form team names)
+    team1_player_ids = []
+    team2_player_ids = []
+    for i in range(5):
+        player = player_stats[i]
+        player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
+        team1_player_ids.append(player_id)
+    for i in range(5, 10):
+        player = player_stats[i]
+        player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
+        team2_player_ids.append(player_id)
 
     insert_team(cursor, team1_name, team1_player_ids)
     insert_team(cursor, team2_name, team2_player_ids)
@@ -218,7 +285,7 @@ def main():
     conn = setup_database()
     cursor = conn.cursor()
 
-    # Process a single match (URL 378664)
+    # Process a single match (URL)
     url = 'https://www.vlr.gg/378663'
     print(f"Processing match: {url}")
     process_match(url, cursor)

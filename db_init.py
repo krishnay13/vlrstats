@@ -1,5 +1,4 @@
 import sqlite3
-from datetime import date
 import json
 
 
@@ -8,16 +7,12 @@ def setup_database():
     conn = sqlite3.connect('valorant_esports.db')
     cursor = conn.cursor()
 
-
-    tables_to_drop = [
-        'Maps', 'Matches', 'PlayerStats', 'Player_Matches',
-        'Player_Stats', 'Players', 'Team_Matches', 'Team_Stats', 'Teams'
-    ]
-
+    # Drop existing tables to reset the database
+    tables_to_drop = ['Matches', 'Maps', 'Players', 'Player_Stats', 'Teams']
     for table in tables_to_drop:
         cursor.execute(f'DROP TABLE IF EXISTS {table}')
 
-    # Create tables
+    # Create Matches table with 10 player stat IDs (match totals)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Matches (
         match_id INTEGER PRIMARY KEY,
@@ -28,65 +23,108 @@ def setup_database():
         map1_id INTEGER,
         map2_id INTEGER,
         map3_id INTEGER,
-        match_stats TEXT
+        p1_stat_id INTEGER,
+        p2_stat_id INTEGER,
+        p3_stat_id INTEGER,
+        p4_stat_id INTEGER,
+        p5_stat_id INTEGER,
+        p6_stat_id INTEGER,
+        p7_stat_id INTEGER,
+        p8_stat_id INTEGER,
+        p9_stat_id INTEGER,
+        p10_stat_id INTEGER
     )
     ''')
 
+    # Create Maps table with 10 player stat IDs (map totals)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Maps (
         map_id INTEGER PRIMARY KEY,
+        match_id INTEGER,
+        map_name TEXT,
         team1_name TEXT,
         team2_name TEXT,
         team1_score INTEGER,
         team2_score INTEGER,
-        map_name TEXT,
-        map_stats TEXT
+        p1_stat_id INTEGER,
+        p2_stat_id INTEGER,
+        p3_stat_id INTEGER,
+        p4_stat_id INTEGER,
+        p5_stat_id INTEGER,
+        p6_stat_id INTEGER,
+        p7_stat_id INTEGER,
+        p8_stat_id INTEGER,
+        p9_stat_id INTEGER,
+        p10_stat_id INTEGER
     )
     ''')
 
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Teams (
-        team_id INTEGER PRIMARY KEY,
-        team_name TEXT UNIQUE,
-        player_ids TEXT,
-        avg_kpr REAL,
-        avg_kpg REAL,
-        avg_dpr REAL,
-        avg_dpg REAL,
-        avg_fb_fd_per_game REAL
-    )
-    ''')
-
+    # Create Players table (unchanged)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Players (
         player_id INTEGER PRIMARY KEY,
         player_name TEXT,
-        agents_kpg TEXT,
-        avg_kpg REAL,
-        avg_fbp REAL,
-        full_avg_stats TEXT
+        team_name TEXT
     )
     ''')
 
-    # Save (commit) the changes
+    # Create Player_Stats table (unchanged)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Player_Stats (
+        stat_id INTEGER PRIMARY KEY,
+        player_id INTEGER,
+        match_id INTEGER,
+        map_id INTEGER,
+        kills INTEGER,
+        deaths INTEGER,
+        assists INTEGER,
+        acs INTEGER,
+        rating REAL,
+        agent TEXT,
+        plus_minus TEXT,
+        kast TEXT,
+        adr INTEGER,
+        hs_percentage TEXT,
+        fk INTEGER,
+        fd INTEGER,
+        f_plus_minus TEXT
+    )
+    ''')
+
+    # Create Teams table with 5 player IDs (stats will be dynamically calculated)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Teams (
+        team_id INTEGER PRIMARY KEY,
+        team_name TEXT,
+        player1_id INTEGER,
+        player2_id INTEGER,
+        player3_id INTEGER,
+        player4_id INTEGER,
+        player5_id INTEGER
+    )
+    ''')
+
     conn.commit()
     return conn
 
 
 # Database insertion functions
-def insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, match_stats):
+def insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, match_stat_ids):
     cursor.execute('''
-    INSERT INTO Matches (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, match_stats)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, json.dumps(match_stats)))
+    INSERT INTO Matches (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, p1_stat_id,
+                         p2_stat_id, p3_stat_id, p4_stat_id, p5_stat_id, p6_stat_id, p7_stat_id, p8_stat_id,
+                         p9_stat_id, p10_stat_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, *match_stat_ids))
     return cursor.lastrowid
 
 
-def insert_map(cursor, team1_name, team2_name, team1_score, team2_score, map_name, map_stats):
+def insert_map(cursor, match_id, map_name, team1_name, team2_name, team1_score, team2_score, map_stat_ids):
     cursor.execute('''
-    INSERT INTO Maps (team1_name, team2_name, team1_score, team2_score, map_name, map_stats)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ''', (team1_name, team2_name, team1_score, team2_score, map_name, json.dumps(map_stats)))
+    INSERT INTO Maps (match_id, map_name, team1_name, team2_name, team1_score, team2_score, p1_stat_id, p2_stat_id,
+                      p3_stat_id, p4_stat_id, p5_stat_id, p6_stat_id, p7_stat_id, p8_stat_id, p9_stat_id, p10_stat_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (match_id, map_name, team1_name, team2_name, team1_score, team2_score, *map_stat_ids))
     return cursor.lastrowid
 
 
@@ -100,65 +138,34 @@ def get_or_insert_team(cursor, team_name):
         return result[0]
 
 
-def insert_team(cursor, team_name, player_ids, avg_kpr, avg_kpg, avg_dpr, avg_dpg, avg_fb_fd_per_game):
+def insert_team(cursor, team_name, player_ids):
     cursor.execute('''
-    INSERT INTO Teams (team_name, player_ids, avg_kpr, avg_kpg, avg_dpr, avg_dpg, avg_fb_fd_per_game)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (team_name, json.dumps(player_ids), avg_kpr, avg_kpg, avg_dpr, avg_dpg, avg_fb_fd_per_game))
+    INSERT INTO Teams (team_name, player1_id, player2_id, player3_id, player4_id, player5_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ''', (team_name, *player_ids))
 
 
-def get_or_insert_player(cursor, player_name):
-    cursor.execute('SELECT player_id FROM Players WHERE player_name = ?', (player_name,))
+def get_or_insert_player(cursor, player_name, team_name):
+    cursor.execute('SELECT player_id FROM Players WHERE player_name = ? AND team_name = ?', (player_name, team_name))
     result = cursor.fetchone()
     if result is None:
-        cursor.execute('INSERT INTO Players (player_name) VALUES (?)', (player_name,))
+        cursor.execute('INSERT INTO Players (player_name, team_name) VALUES (?, ?)', (player_name, team_name))
         return cursor.lastrowid
     else:
         return result[0]
 
 
-def insert_player(cursor, player_name, agents_kpg, avg_kpg, avg_fbp, full_avg_stats):
+def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
     cursor.execute('''
-    INSERT INTO Players (player_name, agents_kpg, avg_kpg, avg_fbp, full_avg_stats)
-    VALUES (?, ?, ?, ?, ?)
-    ''', (player_name, json.dumps(agents_kpg), avg_kpg, avg_fbp, json.dumps(full_avg_stats)))
-
-
-# Example usage
-def main():
-    conn = setup_database()
-    cursor = conn.cursor()
-
-    # Sample data
-    team1_name = "FUT Esports"
-    team2_name = "FNATIC"
-    team1_score = 2
-    team2_score = 1
-    match_stats = []
-
-    map1_stats = [
-        {'player_name': 'yetujey', 'team': 'FUT', 'agent': 'Viper', 'rating': 0.0, 'acs': 210, 'kills': 13,
-         'deaths': 14, 'assists': 1, 'plus_minus': '-1', 'kast': '', 'adr': 143, 'hs_percentage': '39%', 'fk': 3,
-         'fd': 2, 'f_plus_minus': '+1'},
-        # Add other players' stats for map1
-    ]
-    map2_stats = [
-        # Add players' stats for map2
-    ]
-    map3_stats = [
-        # Add players' stats for map3
-    ]
-
-    map1_id = insert_map(cursor, team1_name, team2_name, 5, 13, "Split", map1_stats)
-    map2_id = insert_map(cursor, team1_name, team2_name, 13, 8, "Lotus", map2_stats)
-    map3_id = insert_map(cursor, team1_name, team2_name, 13, 3, "Ascent", map3_stats)
-
-    match_id = insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id,
-                            match_stats)
-
-    conn.commit()
-    conn.close()
+    INSERT INTO Player_Stats (player_id, match_id, map_id, kills, deaths, assists, acs, rating, agent, plus_minus,
+                              kast, adr, hs_percentage, fk, fd, f_plus_minus)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (player_id, match_id, map_id, player_stats['kills'], player_stats['deaths'], player_stats['assists'],
+          player_stats['acs'], player_stats['rating'], player_stats['agent'], player_stats['plus_minus'],
+          player_stats['kast'], player_stats['adr'], player_stats['hs_percentage'], player_stats['fk'],
+          player_stats['fd'], player_stats['f_plus_minus']))
 
 
 if __name__ == "__main__":
-    main()
+    conn = setup_database()
+    conn.close()

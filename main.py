@@ -9,6 +9,7 @@ def add_prefix_to_match_ids(input_file, output_file, prefix='https://vlr.gg/'):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 if __name__ == "__main__":
     input_file = 'matches.txt'
     output_file = 'full_matches.txt'
