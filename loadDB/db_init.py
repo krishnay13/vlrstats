@@ -4,7 +4,7 @@ import json
 
 # Set up the SQLite database
 def setup_database():
-    conn = sqlite3.connect('valorant_esports.db')
+    conn = sqlite3.connect('../valorant_esports.db')
     cursor = conn.cursor()
 
     # Drop existing tables to reset the database
@@ -91,11 +91,11 @@ def setup_database():
     )
     ''')
 
-    # Create Teams table with 5 player IDs (stats will be dynamically calculated)
+    # Create Teams table with a UNIQUE constraint on team_name
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Teams (
         team_id INTEGER PRIMARY KEY,
-        team_name TEXT,
+        team_name TEXT UNIQUE,
         player1_id INTEGER,
         player2_id INTEGER,
         player3_id INTEGER,
@@ -128,31 +128,37 @@ def insert_map(cursor, match_id, map_name, team1_name, team2_name, team1_score, 
     return cursor.lastrowid
 
 
-def get_or_insert_team(cursor, team_name):
+def get_or_insert_team(cursor, team_name, player_ids):
     cursor.execute('SELECT team_id FROM Teams WHERE team_name = ?', (team_name,))
     result = cursor.fetchone()
-    if result is None:
-        cursor.execute('INSERT INTO Teams (team_name) VALUES (?)', (team_name,))
-        return cursor.lastrowid
+    if result:
+        # Team exists, update player IDs if necessary
+        team_id = result[0]
+        cursor.execute('''
+        UPDATE Teams SET player1_id = ?, player2_id = ?, player3_id = ?, player4_id = ?, player5_id = ?
+        WHERE team_id = ?
+        ''', (player_ids[0], player_ids[1], player_ids[2], player_ids[3], player_ids[4], team_id))
+        return team_id
     else:
-        return result[0]
-
-
-def insert_team(cursor, team_name, player_ids):
-    cursor.execute('''
-    INSERT INTO Teams (team_name, player1_id, player2_id, player3_id, player4_id, player5_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ''', (team_name, *player_ids))
+        # Team does not exist, insert new team
+        cursor.execute('''
+        INSERT INTO Teams (team_name, player1_id, player2_id, player3_id, player4_id, player5_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (team_name, *player_ids))
+        return cursor.lastrowid
 
 
 def get_or_insert_player(cursor, player_name, team_name):
-    cursor.execute('SELECT player_id FROM Players WHERE player_name = ? AND team_name = ?', (player_name, team_name))
+    cursor.execute('SELECT player_id FROM Players WHERE player_name = ?', (player_name,))
     result = cursor.fetchone()
     if result is None:
         cursor.execute('INSERT INTO Players (player_name, team_name) VALUES (?, ?)', (player_name, team_name))
         return cursor.lastrowid
     else:
-        return result[0]
+        # Update team name if different
+        player_id = result[0]
+        cursor.execute('UPDATE Players SET team_name = ? WHERE player_id = ?', (team_name, player_id))
+        return player_id
 
 
 def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
@@ -164,6 +170,7 @@ def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
           player_stats['acs'], player_stats['rating'], player_stats['agent'], player_stats['plus_minus'],
           player_stats['kast'], player_stats['adr'], player_stats['hs_percentage'], player_stats['fk'],
           player_stats['fd'], player_stats['f_plus_minus']))
+    return cursor.lastrowid
 
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Match Details</h2>
+
+<h3>{{ match[1] }} vs {{ match[2] }}</h3>
+<p>Score: {{ match[3] }} - {{ match[4] }}</p>
+
+<h4>Maps</h4>
+<table>
+    <tr>
+        <th>Map ID</th>
+        <th>Map Name</th>
+        <th>Score</th>
+    </tr>
+    {% for map in maps %}
+    <tr>
+        <td>{{ map[0] }}</td>
+        <td>{{ map[2] }}</td>
+        <td>{{ map[5] }} - {{ map[6] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h4>Player Stats (Match Totals)</h4>
+<table>
+    <tr>
+        <th>Player ID</th>
+        <th>Kills</th>
+        <th>Deaths</th>
+        <th>Assists</th>
+        <th>ACS</th>
+        <th>Rating</th>
+        <!-- Add more columns as needed -->
+    </tr>
+    {% for stat in player_stats %}
+    <tr>
+        <td>{{ stat[1] }}</td>
+        <td>{{ stat[4] }}</td>
+        <td>{{ stat[5] }}</td>
+        <td>{{ stat[6] }}</td>
+        <td>{{ stat[7] }}</td>
+        <td>{{ stat[8] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

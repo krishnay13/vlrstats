@@ -106,7 +106,7 @@ def scrape_maps_and_scorelines(url):
     return team1_name, team2_name, team1_score, team2_score, maps_and_scorelines, player_stats, agents_col
 
 
-# Database insertion functions
+# Database insertion functions (adjusted to prevent duplicate teams)
 def insert_match(cursor, team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id, match_stat_ids):
     cursor.execute('''
     INSERT INTO Matches (team1_name, team2_name, team1_score, team2_score, map1_id, map2_id, map3_id,
@@ -135,8 +135,29 @@ def get_or_insert_player(cursor, player_name, team_name):
         return cursor.lastrowid
     else:
         # Update team name if different
-        cursor.execute('UPDATE Players SET team_name = ? WHERE player_id = ?', (team_name, result[0]))
-        return result[0]
+        player_id = result[0]
+        cursor.execute('UPDATE Players SET team_name = ? WHERE player_id = ?', (team_name, player_id))
+        return player_id
+
+
+def get_or_insert_team(cursor, team_name, player_ids):
+    cursor.execute('SELECT team_id FROM Teams WHERE team_name = ?', (team_name,))
+    result = cursor.fetchone()
+    if result:
+        # Team exists, update player IDs if necessary
+        team_id = result[0]
+        cursor.execute('''
+        UPDATE Teams SET player1_id = ?, player2_id = ?, player3_id = ?, player4_id = ?, player5_id = ?
+        WHERE team_id = ?
+        ''', (player_ids[0], player_ids[1], player_ids[2], player_ids[3], player_ids[4], team_id))
+        return team_id
+    else:
+        # Team does not exist, insert new team
+        cursor.execute('''
+        INSERT INTO Teams (team_name, player1_id, player2_id, player3_id, player4_id, player5_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (team_name, *player_ids))
+        return cursor.lastrowid
 
 
 def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
@@ -151,16 +172,6 @@ def insert_player_stats(cursor, player_id, match_id, map_id, player_stats):
     return cursor.lastrowid
 
 
-def insert_team(cursor, team_name, player_ids):
-    if len(player_ids) != 5:
-        raise ValueError("There must be exactly 5 player IDs for the team.")
-
-    cursor.execute('''
-    INSERT INTO Teams (team_name, player1_id, player2_id, player3_id, player4_id, player5_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ''', (team_name, player_ids[0], player_ids[1], player_ids[2], player_ids[3], player_ids[4]))
-
-
 # Processing each match link
 def process_match(url, cursor):
     # Scrape match data
@@ -173,7 +184,7 @@ def process_match(url, cursor):
         return
     short_team1_name, short_team2_name = team_names
 
-    # Map full team names to short team names
+    # Map full team names to short-form team names
     team_name_mapping = {}
     for name in [team1_name, team2_name]:
         if name.startswith(short_team1_name) or short_team1_name.startswith(name):
@@ -194,42 +205,53 @@ def process_match(url, cursor):
     match_id = insert_match(cursor, team1_name, team2_name, team1_score, team2_score,
                             *placeholder_map_ids, placeholder_stat_ids)
 
-    # Insert maps and get map_ids
-    map_ids = []
-    map_stat_ids_list = []  # To store player stat IDs per map
-
-    # Adjust the order of stats: Map 1 stats, match totals, Map 2 stats, Map 3 stats
-    stats_per_map = 10
+    # Get the number of maps
     total_maps = len(maps)
-    total_stats = len(player_stats)
-    match_totals_index = stats_per_map  # After the first map
+    stats_per_map = 10  # Assuming 10 player stats per map
 
-    # Collect match total stats
-    match_total_stats = player_stats[match_totals_index:match_totals_index + stats_per_map]
+    # Calculate expected total stats
+    expected_stats = stats_per_map * total_maps + stats_per_map  # total_maps maps + match total stats
+    if len(player_stats) < expected_stats:
+        print("Error: Not enough player stats collected.")
+        return
+
+    # Now process the player stats
+    partitions = {}
+    current_index = 0
+
+    # Map 1 stats
+    partitions['map1_stats'] = player_stats[current_index:current_index + stats_per_map]
+    current_index += stats_per_map
+
+    # Match total stats
+    partitions['match_total_stats'] = player_stats[current_index:current_index + stats_per_map]
+    current_index += stats_per_map
+
+    # Remaining map stats
+    for i in range(2, total_maps + 1):
+        key = f'map{i}_stats'
+        partitions[key] = player_stats[current_index:current_index + stats_per_map]
+        current_index += stats_per_map
+
+    # Insert match total stats
+    match_total_stats = partitions['match_total_stats']
     match_stat_ids = []
     for player in match_total_stats:
         player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
-        stat_id = insert_player_stats(cursor, player_id, match_id, None, player)  # No map_id for match totals
+        stat_id = insert_player_stats(cursor, player_id, match_id, None, player)
         match_stat_ids.append(stat_id)
 
-    # Now process each map
-    current_index = 0
+    # Insert maps and collect map_stat_ids
+    map_ids = []
+    map_stat_ids_list = []
     for i, (map_name, scoreline, game_id) in enumerate(maps):
         team1_map_score, team2_map_score = map(int, scoreline.split(' - '))
-
-        # Skip match totals after the first map
-        if i == 0:
-            map_player_stats = player_stats[current_index:current_index + stats_per_map]
-            current_index += stats_per_map + stats_per_map  # Skip over match totals
-        else:
-            map_player_stats = player_stats[current_index:current_index + stats_per_map]
-            current_index += stats_per_map
+        map_player_stats = partitions[f'map{i + 1}_stats']
 
         map_stat_ids = []
         for player in map_player_stats:
             player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
-            stat_id = insert_player_stats(cursor, player_id, match_id, None,
-                                          player)  # Map ID will be set after map insertion
+            stat_id = insert_player_stats(cursor, player_id, match_id, None, player)
             map_stat_ids.append(stat_id)
 
         # Insert the map with placeholder stat IDs (will update later)
@@ -264,7 +286,7 @@ def process_match(url, cursor):
     WHERE match_id = ?
     ''', (*match_stat_ids, match_id))
 
-    # Insert teams using the first 10 players (short-form team names)
+    # Insert or update teams using the updated function
     team1_player_ids = []
     team2_player_ids = []
     for i in range(5):
@@ -276,8 +298,9 @@ def process_match(url, cursor):
         player_id = get_or_insert_player(cursor, player['player_name'], player['team'])
         team2_player_ids.append(player_id)
 
-    insert_team(cursor, team1_name, team1_player_ids)
-    insert_team(cursor, team2_name, team2_player_ids)
+    # Use get_or_insert_team to prevent duplicate teams
+    get_or_insert_team(cursor, team1_name, team1_player_ids)
+    get_or_insert_team(cursor, team2_name, team2_player_ids)
 
 
 # Main function
@@ -285,13 +308,26 @@ def main():
     conn = setup_database()
     cursor = conn.cursor()
 
-    # Process a single match (URL)
-    url = 'https://www.vlr.gg/378663'
-    print(f"Processing match: {url}")
-    process_match(url, cursor)
+    # Read URLs from full_matches.txt
+    try:
+        with open('full_matches.txt', 'r') as f:
+            urls = [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        print("Error: The file 'full_matches.txt' was not found.")
+        return
 
-    # Commit the changes and close the connection
-    conn.commit()
+    # Process each match URL
+    for url in urls:
+        print(f"Processing match: {url}")
+        try:
+            process_match(url, cursor)
+            # Commit after each successful match processing
+            conn.commit()
+        except Exception as e:
+            print(f"An error occurred while processing {url}: {e}")
+            continue  # Move on to the next URL
+
+    # Close the connection after all matches have been processed
     conn.close()
 
 

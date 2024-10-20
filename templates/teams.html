@@ -1,0 +1,24 @@
+<!-- Adjusted Teams Template -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Teams</h2>
+<table>
+    <tr>
+        <th>Team ID</th>
+        <th>Team Name</th>
+        <th>Players</th>
+    </tr>
+    {% for team in teams %}
+    <tr>
+        <td>{{ team[0] }}</td>
+        <td>{{ team[1] }}</td>
+        <td>
+            {% for player_name in team[2] %}
+            {{ player_name }}<br>
+            {% endfor %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
