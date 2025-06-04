@@ -29,7 +29,6 @@ export default async function TeamDetailsPage({ params }) {
     return (
       <div>
         <h1>{team.team_name}</h1>
-        <p>Region: {team.region}</p>
 
         <h2>Players</h2>
         <table>
@@ -37,7 +36,6 @@ export default async function TeamDetailsPage({ params }) {
             <tr>
               <th>Player ID</th>
               <th>Player Name</th>
-              <th>Role</th>
             </tr>
           </thead>
           <tbody>
@@ -45,7 +43,6 @@ export default async function TeamDetailsPage({ params }) {
               <tr key={player.player_id}>
                 <td>{player.player_id}</td>
                 <td>{player.player_name}</td>
-                <td>{player.role}</td>
               </tr>
             ))}
           </tbody>
