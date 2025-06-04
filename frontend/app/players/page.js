@@ -22,8 +22,6 @@ export default async function PlayersPage() {
               <th>Player ID</th>
               <th>Player Name</th>
               <th>Team</th>
-              <th>Role</th>
-              <th>Details</th>
             </tr>
           </thead>
           <tbody>
@@ -32,12 +30,6 @@ export default async function PlayersPage() {
                 <td>{player.player_id}</td>
                 <td>{player.player_name}</td>
                 <td>{player.team_name}</td>
-                <td>{player.role}</td>
-                <td>
-                  <Link href={`/players/${player.player_id}`} className="link">
-                    View Stats
-                  </Link>
-                </td>
               </tr>
             ))}
           </tbody>

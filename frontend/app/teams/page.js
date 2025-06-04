@@ -21,7 +21,6 @@ export default async function TeamsPage() {
             <tr>
               <th>Team ID</th>
               <th>Team Name</th>
-              <th>Region</th>
               <th>Details</th>
             </tr>
           </thead>
@@ -30,7 +29,6 @@ export default async function TeamsPage() {
               <tr key={team.team_id}>
                 <td>{team.team_id}</td>
                 <td>{team.team_name}</td>
-                <td>{team.region}</td>
                 <td>
                   <Link href={`/teams/${team.team_id}`} className="link">
                     View Players
