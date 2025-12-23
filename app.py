@@ -1,11 +1,15 @@
 # app.py
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, jsonify, request
 import sqlite3
+from analytics.elo import EloEngine
+from analytics.predict import Predictor
 
 app = Flask(__name__)
 
 DATABASE = 'valorant_esports.db'
+elo_engine = EloEngine(DATABASE)
+predictor = Predictor(DATABASE)
 
 
 def get_db():
@@ -88,6 +92,55 @@ def match_details(match_id):
     player_stats = cursor.fetchall()
 
     return render_template('match_details.html', match=match, maps=maps, player_stats=player_stats)
+
+
+# --- API: Elo & Predictions ---
+@app.route('/api/elo/recalculate', methods=['POST'])
+def api_recalculate_elo():
+    elo_engine.recalc_from_history()
+    # Reload predictor state to see updated elos
+    global predictor
+    predictor = Predictor(DATABASE)
+    return jsonify({"status": "ok"})
+
+
+@app.route('/api/elo/teams')
+def api_elo_teams():
+    con = get_db()
+    cur = con.cursor()
+    cur.execute('SELECT team_name, COALESCE(team_elo, 1500.0) FROM Teams ORDER BY team_elo DESC')
+    rows = cur.fetchall()
+    return jsonify([{'team_name': r[0], 'team_elo': r[1]} for r in rows])
+
+
+@app.route('/api/elo/players')
+def api_elo_players():
+    con = get_db()
+    cur = con.cursor()
+    cur.execute('SELECT player_name, team_name, COALESCE(player_elo, 1500.0) FROM Players ORDER BY player_elo DESC LIMIT 200')
+    rows = cur.fetchall()
+    return jsonify([{'player_name': r[0], 'team_name': r[1], 'player_elo': r[2]} for r in rows])
+
+
+@app.route('/api/predict/match', methods=['POST'])
+def api_predict_match():
+    data = request.get_json(force=True)
+    t1 = data.get('team1_name')
+    t2 = data.get('team2_name')
+    if not t1 or not t2:
+        return jsonify({'error': 'team1_name and team2_name required'}), 400
+    res = predictor.predict_match(t1, t2)
+    return jsonify(res)
+
+
+@app.route('/api/predict/kills', methods=['POST'])
+def api_predict_kills():
+    data = request.get_json(force=True)
+    pname = data.get('player_name')
+    if not pname:
+        return jsonify({'error': 'player_name required'}), 400
+    res = predictor.predict_kills(pname)
+    return jsonify(res)
 
 
 if __name__ == '__main__':
