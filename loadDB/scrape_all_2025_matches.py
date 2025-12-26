@@ -44,21 +44,16 @@ def scrape_matches_from_event(event_url: str) -> List[str]:
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Find all match links - they're in <a> tags with class containing 'match-item'
-        # or in the wf-module-item containers
+        # Trust site structure: collect all anchor hrefs, then filter by having a numeric match id segment
         match_links = soup.find_all('a', href=True)
         
         for link in match_links:
             href = link['href']
-            # Match URLs follow pattern: /542264/team1-vs-team2-event-round
-            if href.startswith('/') and '-vs-' in href:
-                # Extract the numeric match ID and construct full URL
-                parts = href.split('/')
-                if len(parts) >= 2 and parts[1].isdigit():
-                    full_url = f"https://www.vlr.gg{href}"
-                    # Skip showmatches (easy to filter: they typically have "showmatch" in URL)
-                    if 'showmatch' not in href.lower():
-                        match_urls.append(full_url)
+            # Accept any link that looks like "/<id>/<rest>" where id is numeric
+            parts = href.split('/')
+            if len(parts) >= 3 and parts[1].isdigit():
+                full_url = f"https://www.vlr.gg{href}" if href.startswith('/') else href
+                match_urls.append(full_url)
         
         # Deduplicate while preserving order
         seen = set()
@@ -92,14 +87,19 @@ def scrape_all_vct_2025_matches() -> List[str]:
         matches = scrape_matches_from_event(event_url)
         all_matches.update(matches)
         
-        # Be polite to the server
-        time.sleep(2)
+        # Polite delay
+        time.sleep(1)
     
     print("\n" + "=" * 70)
     print(f"Total unique matches found: {len(all_matches)}")
     
-    # Sort by match ID (ascending chronological order)
-    sorted_matches = sorted(all_matches, key=lambda url: int(url.split('/')[3]))
+    # Sort by match ID (ascending chronological order) if parseable
+    def extract_id(url: str) -> int:
+        try:
+            return int(url.split('/')[3])
+        except Exception:
+            return 0
+    sorted_matches = sorted(all_matches, key=extract_id)
     
     return sorted_matches
 
