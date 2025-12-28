@@ -99,7 +99,6 @@ https://www.vlr.gg/449005/g2-esports-vs-team-liquid-champions-tour-2025-masters-
 https://www.vlr.gg/449008/edward-gaming-vs-t1-champions-tour-2025-masters-bangkok-ubsf
 https://www.vlr.gg/449009/team-vitality-vs-g2-esports-champions-tour-2025-masters-bangkok-ubsf
 https://www.vlr.gg/449010/edward-gaming-vs-g2-esports-champions-tour-2025-masters-bangkok-ubf
-https://www.vlr.gg/449011/g2-esports-vs-t1-champions-tour-2025-masters-bangkok-gf
 https://www.vlr.gg/449012/t1-vs-team-vitality-champions-tour-2025-masters-bangkok-lr1
 https://www.vlr.gg/449013/edward-gaming-vs-t1-champions-tour-2025-masters-bangkok-lbf
 https://www.vlr.gg/450047/xi-lai-gaming-vs-bilibili-gaming-champions-tour-2025-china-stage-1-w1
@@ -132,7 +131,6 @@ https://www.vlr.gg/450073/wolves-esports-vs-all-gamers-champions-tour-2025-china
 https://www.vlr.gg/450074/bilibili-gaming-vs-trace-esports-champions-tour-2025-china-stage-1-w5
 https://www.vlr.gg/450075/titan-esports-club-vs-nova-esports-champions-tour-2025-china-stage-1-w5
 https://www.vlr.gg/450076/edward-gaming-vs-funplus-phoenix-champions-tour-2025-china-stage-1-w5
-https://www.vlr.gg/450589/team-international-vs-team-thailand-champions-tour-2025-masters-bangkok-main-event
 https://www.vlr.gg/458805/detonation-focusme-vs-global-esports-champions-tour-2025-pacific-stage-1-w1
 https://www.vlr.gg/458806/t1-vs-zeta-division-champions-tour-2025-pacific-stage-1-w1
 https://www.vlr.gg/458807/drx-vs-paper-rex-champions-tour-2025-pacific-stage-1-w1
@@ -288,7 +286,6 @@ https://www.vlr.gg/498624/fnatic-vs-gen-g-valorant-masters-toronto-2025-ubqf
 https://www.vlr.gg/498625/sentinels-vs-paper-rex-valorant-masters-toronto-2025-ubsf
 https://www.vlr.gg/498626/wolves-esports-vs-gen-g-valorant-masters-toronto-2025-ubsf
 https://www.vlr.gg/498627/paper-rex-vs-wolves-esports-valorant-masters-toronto-2025-ubf
-https://www.vlr.gg/498628/paper-rex-vs-fnatic-valorant-masters-toronto-2025-gf
 https://www.vlr.gg/498629/xi-lai-gaming-vs-g2-esports-valorant-masters-toronto-2025-lr1
 https://www.vlr.gg/498630/rex-regum-qeon-vs-fnatic-valorant-masters-toronto-2025-lr1
 https://www.vlr.gg/498631/gen-g-vs-g2-esports-valorant-masters-toronto-2025-lr2
@@ -419,13 +416,11 @@ https://www.vlr.gg/527576/edward-gaming-vs-dragon-ranger-gaming-vct-2025-china-s
 https://www.vlr.gg/527577/all-gamers-vs-tyloo-vct-2025-china-stage-2-ubqf
 https://www.vlr.gg/527579/xi-lai-gaming-vs-dragon-ranger-gaming-vct-2025-china-stage-2-ubsf
 https://www.vlr.gg/527580/bilibili-gaming-vs-tyloo-vct-2025-china-stage-2-ubsf
-https://www.vlr.gg/527581/dragon-ranger-gaming-vs-bilibili-gaming-vct-2025-china-stage-2-ubf
 https://www.vlr.gg/527582/dragon-ranger-gaming-vs-bilibili-gaming-vct-2025-china-stage-2-gf
 https://www.vlr.gg/527583/edward-gaming-vs-trace-esports-vct-2025-china-stage-2-lr1
 https://www.vlr.gg/527584/all-gamers-vs-funplus-phoenix-vct-2025-china-stage-2-lr1
 https://www.vlr.gg/527585/tyloo-vs-edward-gaming-vct-2025-china-stage-2-lr2
 https://www.vlr.gg/527586/xi-lai-gaming-vs-all-gamers-vct-2025-china-stage-2-lr2
-https://www.vlr.gg/527587/edward-gaming-vs-xi-lai-gaming-vct-2025-china-stage-2-lr3
 https://www.vlr.gg/527588/bilibili-gaming-vs-edward-gaming-vct-2025-china-stage-2-lbf
 https://www.vlr.gg/530354/talon-vs-nongshim-redforce-vct-2025-pacific-stage-2-ur1
 https://www.vlr.gg/530355/rex-regum-qeon-vs-t1-vct-2025-pacific-stage-2-ur1
@@ -437,9 +432,7 @@ https://www.vlr.gg/530360/t1-vs-nongshim-redforce-vct-2025-pacific-stage-2-lr2
 https://www.vlr.gg/530361/drx-vs-rex-regum-qeon-vct-2025-pacific-stage-2-lr2
 https://www.vlr.gg/530362/talon-vs-paper-rex-vct-2025-pacific-stage-2-ubf
 https://www.vlr.gg/530363/t1-vs-rex-regum-qeon-vct-2025-pacific-stage-2-lr3
-https://www.vlr.gg/530364/talon-vs-rex-regum-qeon-vct-2025-pacific-stage-2-lf
 https://www.vlr.gg/530365/paper-rex-vs-rex-regum-qeon-vct-2025-pacific-stage-2-gf
-https://www.vlr.gg/530514/team-world-vs-glory-once-again-vct-2025-pacific-stage-2-main-event
 https://www.vlr.gg/530902/leviat-n-vs-cloud9-vct-2025-americas-stage-2-ur1
 https://www.vlr.gg/530903/g2-esports-vs-100-thieves-vct-2025-americas-stage-2-ur1
 https://www.vlr.gg/530904/leviat-n-vs-kr-esports-vct-2025-americas-stage-2-lr1
@@ -450,7 +443,6 @@ https://www.vlr.gg/530908/nrg-vs-leviat-n-vct-2025-americas-stage-2-lr2
 https://www.vlr.gg/530909/cloud9-vs-100-thieves-vct-2025-americas-stage-2-lr2
 https://www.vlr.gg/530910/sentinels-vs-g2-esports-vct-2025-americas-stage-2-ubf
 https://www.vlr.gg/530911/nrg-vs-cloud9-vct-2025-americas-stage-2-lr3
-https://www.vlr.gg/530912/sentinels-vs-nrg-vct-2025-americas-stage-2-lbf
 https://www.vlr.gg/530913/g2-esports-vs-nrg-vct-2025-americas-stage-2-gf
 https://www.vlr.gg/530924/fnatic-vs-bbl-esports-vct-2025-emea-stage-2-ur1
 https://www.vlr.gg/530925/giantx-vs-natus-vincere-vct-2025-emea-stage-2-ur1
@@ -463,10 +455,6 @@ https://www.vlr.gg/530931/team-heretics-vs-natus-vincere-vct-2025-emea-stage-2-l
 https://www.vlr.gg/530932/bbl-esports-vs-team-liquid-vct-2025-emea-stage-2-ubf
 https://www.vlr.gg/530933/giantx-vs-natus-vincere-vct-2025-emea-stage-2-lr3
 https://www.vlr.gg/530934/bbl-esports-vs-giantx-vct-2025-emea-stage-2-lbf
-https://www.vlr.gg/530935/team-liquid-vs-giantx-vct-2025-emea-stage-2-gf
-https://www.vlr.gg/536176/pure-aim-vs-precise-defeat-vct-2025-china-stage-2-all-star-match
-https://www.vlr.gg/536985/team-alpha-vs-team-omega-vct-2025-americas-stage-2-override
-https://www.vlr.gg/538583/team-france-vs-team-emea-vct-2025-emea-stage-2-main-event
 https://www.vlr.gg/542195/paper-rex-vs-xi-lai-gaming-valorant-champions-2025-opening-a
 https://www.vlr.gg/542196/giantx-vs-sentinels-valorant-champions-2025-opening-a
 https://www.vlr.gg/542197/paper-rex-vs-giantx-valorant-champions-2025-winners-a

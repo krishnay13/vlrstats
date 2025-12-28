@@ -44,7 +44,7 @@ def scrape_matches_from_event(event_url: str) -> List[str]:
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Trust site structure: collect all anchor hrefs, then filter by having a numeric match id segment
+        # Trust site structure: collect anchors, filter numeric match id segment, and remove showmatches
         match_links = soup.find_all('a', href=True)
         
         for link in match_links:
@@ -52,6 +52,11 @@ def scrape_matches_from_event(event_url: str) -> List[str]:
             # Accept any link that looks like "/<id>/<rest>" where id is numeric
             parts = href.split('/')
             if len(parts) >= 3 and parts[1].isdigit():
+                # Heuristics to exclude showmatches
+                text = link.get_text(' ', strip=True).lower()
+                parent_text = link.find_parent().get_text(' ', strip=True).lower() if link.find_parent() else ''
+                if ('showmatch' in href.lower()) or ('showmatch' in text) or ('showmatch' in parent_text):
+                    continue
                 full_url = f"https://www.vlr.gg{href}" if href.startswith('/') else href
                 match_urls.append(full_url)
         
@@ -63,7 +68,7 @@ def scrape_matches_from_event(event_url: str) -> List[str]:
                 seen.add(url)
                 unique_matches.append(url)
         
-        print(f"  Found {len(unique_matches)} unique matches")
+        print(f"  Found {len(unique_matches)} unique matches (excluding showmatches)")
         return unique_matches
         
     except Exception as e:

@@ -8,7 +8,8 @@ def setup_database():
     cursor = conn.cursor()
 
     # Drop existing tables to reset the database
-    tables_to_drop = ['Matches', 'Maps', 'Players', 'Player_Stats', 'Teams']
+    tables_to_drop = ['Matches', 'Maps', 'Players', 'Player_Stats', 'Teams',
+                      'Scores', 'Overview']
     for table in tables_to_drop:
         cursor.execute(f'DROP TABLE IF EXISTS {table}')
 
@@ -101,6 +102,53 @@ def setup_database():
         player3_id INTEGER,
         player4_id INTEGER,
         player5_id INTEGER
+    )
+    ''')
+
+    conn.commit()
+    
+    # New: External scraper format tables
+    # Scores table (tournament-level match scores)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Scores (
+        id INTEGER PRIMARY KEY,
+        tournament TEXT,
+        stage TEXT,
+        match_type TEXT,
+        match_name TEXT,
+        team_a TEXT,
+        team_b TEXT,
+        team_a_score INTEGER,
+        team_b_score INTEGER,
+        match_result TEXT
+    )
+    ''')
+
+    # Overview table (per-map player stats)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Overview (
+        id INTEGER PRIMARY KEY,
+        tournament TEXT,
+        stage TEXT,
+        match_type TEXT,
+        match_name TEXT,
+        map TEXT,
+        player TEXT,
+        team TEXT,
+        agents TEXT,
+        rating REAL,
+        average_combat_score INTEGER,
+        kills INTEGER,
+        deaths INTEGER,
+        assists INTEGER,
+        kd TEXT,
+        kast TEXT,
+        adr INTEGER,
+        headshot_pct TEXT,
+        first_kills INTEGER,
+        first_deaths INTEGER,
+        fkd TEXT,
+        side TEXT
     )
     ''')
 
