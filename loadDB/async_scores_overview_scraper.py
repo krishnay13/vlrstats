@@ -3,32 +3,34 @@ import aiohttp
 from bs4 import BeautifulSoup
 import re
 import sqlite3
-import os
 
 DB_PATH = '../valorant_esports.db'
-ROOT_URL = 'https://www.vlr.gg/vct-2025'
+
+# Explicit VCT 2025 events (matches pages) for broader coverage, excluding showmatches later.
+VCT_2025_EVENTS = [
+    "https://www.vlr.gg/event/2275/vct-2025-china-kickoff",
+    "https://www.vlr.gg/event/2274/vct-2025-americas-kickoff",
+    "https://www.vlr.gg/event/2277/vct-2025-pacific-kickoff",
+    "https://www.vlr.gg/event/2276/vct-2025-emea-kickoff",
+    "https://www.vlr.gg/event/2281/valorant-masters-bangkok-2025",
+    "https://www.vlr.gg/event/2347/vct-2025-americas-stage-1",
+    "https://www.vlr.gg/event/2359/vct-2025-china-stage-1",
+    "https://www.vlr.gg/event/2379/vct-2025-pacific-stage-1",
+    "https://www.vlr.gg/event/2380/vct-2025-emea-stage-1",
+    "https://www.vlr.gg/event/2282/valorant-masters-toronto-2025",
+    "https://www.vlr.gg/event/2499/vct-2025-china-stage-2",
+    "https://www.vlr.gg/event/2500/vct-2025-pacific-stage-2",
+    "https://www.vlr.gg/event/2498/vct-2025-emea-stage-2",
+    "https://www.vlr.gg/event/2501/vct-2025-americas-stage-2",
+    "https://www.vlr.gg/event/2283/valorant-champions-2025",
+]
 
 async def fetch(session: aiohttp.ClientSession, url: str) -> str:
     async with session.get(url, timeout=20) as resp:
         resp.raise_for_status()
         return await resp.text()
 
-def parse_event_links(html: str) -> list[tuple[str,str]]:
-    soup = BeautifulSoup(html, 'html.parser')
-    events = []
-    for link in soup.find_all('a', href=re.compile(r'/event/\d+')):
-        href = link.get('href', '')
-        name = link.get_text(strip=True)
-        if href.startswith('/event/') and name:
-            events.append((name, f"https://www.vlr.gg{href}"))
-    # Deduplicate
-    seen = set()
-    unique = []
-    for name, url in events:
-        if url not in seen:
-            seen.add(url)
-            unique.append((name, url))
-    return unique
+# No root discovery needed; we use a fixed event list.
 
 async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url: str) -> tuple[list,list]:
     html = await fetch(session, match_url)
@@ -110,19 +112,21 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
     return [scores_row], overview_rows
 
 async def main():
+    # Use explicit event list for full coverage
     async with aiohttp.ClientSession() as session:
-        root_html = await fetch(session, ROOT_URL)
-        events = parse_event_links(root_html)
-        # build match urls per event
         all_scores = []
         all_overview = []
-        for name, url in events:
-            # try matches subpage first
-            matches_url = url.rstrip('/') + '/matches'
+        sem = asyncio.Semaphore(10)
+        for ev_url in VCT_2025_EVENTS:
+            # Derive event name from URL for labeling
+            event_name = ev_url.split('/')[-1].replace('-', ' ').title()
+            # Build matches page URL
+            event_id = ev_url.split('/')[4]
+            matches_url = f"https://www.vlr.gg/event/matches/{event_id}/"
             try:
                 html = await fetch(session, matches_url)
             except Exception:
-                html = await fetch(session, url)
+                html = await fetch(session, ev_url)
             soup = BeautifulSoup(html, 'html.parser')
             match_urls = []
             for a in soup.find_all('a', href=re.compile(r'^/\d+/[^/]+')):
@@ -133,16 +137,19 @@ async def main():
                     if 'showmatch' in href.lower() or 'showmatch' in t:
                         continue
                     match_urls.append(f"https://www.vlr.gg{href}")
-            # Dedup
             match_urls = list(dict.fromkeys(match_urls))
-            # Fetch matches sequentially to avoid rate-limits (can parallelize if needed)
-            for mu in match_urls:
-                try:
-                    scores, overview = await parse_match(session, name, mu)
+            # Parse matches with bounded concurrency
+            async def bounded_parse(mu):
+                async with sem:
+                    return await parse_match(session, event_name, mu)
+            tasks = [bounded_parse(mu) for mu in match_urls]
+            try:
+                results = await asyncio.gather(*tasks)
+                for scores, overview in results:
                     all_scores.extend(scores)
                     all_overview.extend(overview)
-                except Exception as e:
-                    print(f"[ERR] {mu}: {e}")
+            except Exception as e:
+                print(f"[ERR] parsing batch for {event_name}: {e}")
         # Insert into DB
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
@@ -154,18 +161,7 @@ async def main():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_overview)
         conn.commit()
         conn.close()
-        # Write CSVs too
-        os.makedirs('data/vct_2025/matches', exist_ok=True)
-        import csv
-        with open('data/vct_2025/matches/scores.csv', 'w', newline='') as f:
-            w = csv.writer(f)
-            w.writerow(["Tournament","Stage","Match Type","Match Name","Team A","Team B","Team A Score","Team B Score","Match Result"]) 
-            w.writerows(all_scores)
-        with open('data/vct_2025/matches/overview.csv', 'w', newline='') as f:
-            w = csv.writer(f)
-            w.writerow(["Tournament","Stage","Match Type","Match Name","Map","Player","Team","Agents","Rating","Average Combat Score","Kills","Deaths","Assists","Kills - Deaths (KD)","Kill, Assist, Trade, Survive %","Average Damage Per Round","Headshot %","First Kills","First Deaths","Kills - Deaths (FKD)","Side"]) 
-            w.writerows(all_overview)
-        print(f"[OK] Inserted {len(all_scores)} scores and {len(all_overview)} overview rows.\nCSV saved to data/vct_2025/matches/")
+        print(f"[OK] Inserted {len(all_scores)} scores and {len(all_overview)} overview rows into the database.")
 
 if __name__ == '__main__':
     asyncio.run(main())
