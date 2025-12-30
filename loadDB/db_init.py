@@ -152,6 +152,34 @@ def setup_database():
     )
     ''')
 
+    # New: Per-map team score totals
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS MapScores (
+        id INTEGER PRIMARY KEY,
+        tournament TEXT,
+        stage TEXT,
+        match_type TEXT,
+        match_name TEXT,
+        map TEXT,
+        team_a TEXT,
+        team_a_score INTEGER,
+        team_b TEXT,
+        team_b_score INTEGER
+    )
+    ''')
+
+    # New: Maps played per match
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS MapsPlayed (
+        id INTEGER PRIMARY KEY,
+        tournament TEXT,
+        stage TEXT,
+        match_type TEXT,
+        match_name TEXT,
+        map TEXT
+    )
+    ''')
+
     conn.commit()
     return conn
 

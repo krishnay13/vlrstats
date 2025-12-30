@@ -54,6 +54,9 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
     scores_row = [event_name, '', '', match_name, team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}"]
     # Overview rows per map
     overview_rows = []
+    # Additional rows: maps played and per-map team totals
+    maps_played_rows = []
+    map_scores_rows = []
     for game_div in soup.select('div.vm-stats-game'):
         game_id = game_div.get('data-game-id')
         if not game_id or game_id == 'all':
@@ -67,6 +70,45 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
         if not map_name:
             nav_item = soup.find('a', class_='vm-stats-gamesnav-item', attrs={'data-game-id': game_id})
             map_name = nav_item.get_text(strip=True) if nav_item else 'Unknown'
+        # Record maps played
+        maps_played_rows.append([event_name, '', '', match_name, map_name])
+        # Per-map team totals (best effort from header text)
+        a_map_score = None
+        b_map_score = None
+        if header:
+            # Strategy 1: dash-delimited total (e.g., 13 - 10)
+            header_text = header.get_text(' ', strip=True)
+            m = re.search(r'(\d{1,2})\s*-\s*(\d{1,2})', header_text)
+            if m:
+                try:
+                    a_map_score = int(m.group(1))
+                    b_map_score = int(m.group(2))
+                except:
+                    a_map_score = b_map_score = None
+            # Strategy 2: explicit score elements
+            if a_map_score is None or b_map_score is None:
+                score_elems = header.find_all(class_=re.compile(r'score|vs-score|header-score'))
+                nums = []
+                for se in score_elems:
+                    for token in re.findall(r'\b\d{1,2}\b', se.get_text(' ', strip=True)):
+                        try:
+                            nums.append(int(token))
+                        except:
+                            pass
+                if len(nums) >= 2:
+                    a_map_score, b_map_score = nums[0], nums[1]
+            # Strategy 3: any two numbers in header nearest the map name
+            if a_map_score is None or b_map_score is None:
+                nums = []
+                for token in re.findall(r'\b\d{1,2}\b', header_text):
+                    try:
+                        nums.append(int(token))
+                    except:
+                        pass
+                if len(nums) >= 2:
+                    a_map_score, b_map_score = nums[0], nums[1]
+        if a_map_score is not None and b_map_score is not None:
+            map_scores_rows.append([event_name, '', '', match_name, map_name, team_a, a_map_score, team_b, b_map_score])
         # Player rows
         player_rows = game_div.select('table.wf-table-inset tbody tr')
         for row in player_rows:
@@ -109,13 +151,15 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
             fkd = ''
             side = ''
             overview_rows.append([event_name, '', '', match_name, map_name, player, team, agent, rating, acs, kills, deaths, assists, kd, kast, adr, hs, fk, fd, fkd, side])
-    return [scores_row], overview_rows
+    return [scores_row, maps_played_rows, map_scores_rows], overview_rows
 
 async def main():
     # Use explicit event list for full coverage
     async with aiohttp.ClientSession() as session:
         all_scores = []
         all_overview = []
+        all_maps_played = []
+        all_map_scores = []
         sem = asyncio.Semaphore(10)
         for ev_url in VCT_2025_EVENTS:
             # Derive event name from URL for labeling
@@ -145,8 +189,10 @@ async def main():
             tasks = [bounded_parse(mu) for mu in match_urls]
             try:
                 results = await asyncio.gather(*tasks)
-                for scores, overview in results:
-                    all_scores.extend(scores)
+                for scores_sets, overview in results:
+                    all_scores.append(scores_sets[0])
+                    all_maps_played.extend(scores_sets[1])
+                    all_map_scores.extend(scores_sets[2])
                     all_overview.extend(overview)
             except Exception as e:
                 print(f"[ERR] parsing batch for {event_name}: {e}")
@@ -159,9 +205,15 @@ async def main():
         cur.executemany('''
             INSERT INTO Overview (tournament, stage, match_type, match_name, map, player, team, agents, rating, average_combat_score, kills, deaths, assists, kd, kast, adr, headshot_pct, first_kills, first_deaths, fkd, side)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_overview)
+        cur.executemany('''
+            INSERT INTO MapsPlayed (tournament, stage, match_type, match_name, map)
+            VALUES (?, ?, ?, ?, ?)''', all_maps_played)
+        cur.executemany('''
+            INSERT INTO MapScores (tournament, stage, match_type, match_name, map, team_a, team_a_score, team_b, team_b_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_map_scores)
         conn.commit()
         conn.close()
-        print(f"[OK] Inserted {len(all_scores)} scores and {len(all_overview)} overview rows into the database.")
+        print(f"[OK] Inserted {len(all_scores)} scores, {len(all_map_scores)} map scores, {len(all_maps_played)} maps played, and {len(all_overview)} overview rows into the database.")
 
 if __name__ == '__main__':
     asyncio.run(main())
