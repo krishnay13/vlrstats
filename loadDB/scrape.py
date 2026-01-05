@@ -118,9 +118,14 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
                     a_map_score, b_map_score = nums[0], nums[1]
 
         # Store None when scores are missing to avoid misleading 0s
-        maps_info.append((match_id, game_id, map_name_clean, a_map_score if a_map_score is not None else None, b_map_score if b_map_score is not None else None))
+        # Only record played maps (both scores present)
+        if a_map_score is not None and b_map_score is not None:
+            maps_info.append((match_id, game_id, map_name_clean, a_map_score, b_map_score))
 
         player_rows = game_div.select('table.wf-table-inset tbody tr')
+        # Only record player stats for played maps
+        if a_map_score is None or b_map_score is None:
+            continue
         for row in player_rows:
             cells = row.find_all('td')
             if len(cells) < 7:
@@ -154,11 +159,14 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
 
             players_info.append((match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists))
 
-    # Fallback series score from per-map results if header parse failed
-    if (a_score == 0 and b_score == 0) and any(tas is not None and tbs is not None for _, _, _, tas, tbs in maps_info):
+    # Fallback/recovery: derive series score from per-map results when header is missing or implausible (e.g., 1-0)
+    if any(tas is not None and tbs is not None for _, _, _, tas, tbs in maps_info):
         a_wins = sum(1 for _, _, _, tas, tbs in maps_info if tas is not None and tbs is not None and tas > tbs)
         b_wins = sum(1 for _, _, _, tas, tbs in maps_info if tas is not None and tbs is not None and tbs > tas)
-        a_score, b_score = a_wins, b_wins
+        wins_sum = a_wins + b_wins
+        # If header says 0-0 or implausible sum, or header sum doesn't match map winners, trust computed wins
+        if (a_score + b_score) < 2 or (a_score + b_score) != wins_sum:
+            a_score, b_score = a_wins, b_wins
 
     match_row = (match_id, event_name, stage, match_type, match_name, team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}")
 

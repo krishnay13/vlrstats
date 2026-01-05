@@ -55,13 +55,34 @@ def main():
     parser.add_argument("--match", dest="match_name", help="Exact match name to inspect (default: random selection)")
     parser.add_argument("--id", dest="match_id", type=int, help="Exact numeric match_id to inspect")
     parser.add_argument("--count", dest="count", type=int, default=3, help="Number of random matches to display (default: 3)")
+    parser.add_argument("--find-mismatches", action="store_true", help="List matches where series maps != count of Maps rows")
     args = parser.parse_args()
     if not os.path.exists(DB_PATH):
         print(f"DB not found at {DB_PATH}")
         return
     conn = sqlite3.connect(DB_PATH)
     try:
-        if args.match_name or args.match_id is not None:
+        if args.find_mismatches:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT m.match_id, m.match_name, m.team_a, m.team_b, m.team_a_score, m.team_b_score,
+                       (SELECT COUNT(*) FROM Maps mp WHERE mp.match_id = m.match_id AND mp.team_a_score IS NOT NULL AND mp.team_b_score IS NOT NULL) AS map_count
+                FROM Matches m
+                WHERE m.team_a_score IS NOT NULL AND m.team_b_score IS NOT NULL
+                AND (m.team_a_score + m.team_b_score) >= 2
+                AND (m.team_a_score + m.team_b_score) != (
+                    SELECT COUNT(*) FROM Maps mp WHERE mp.match_id = m.match_id AND mp.team_a_score IS NOT NULL AND mp.team_b_score IS NOT NULL
+                )
+                ORDER BY ABS((m.team_a_score + m.team_b_score) - (
+                    SELECT COUNT(*) FROM Maps mp WHERE mp.match_id = m.match_id AND mp.team_a_score IS NOT NULL AND mp.team_b_score IS NOT NULL
+                )) DESC
+                LIMIT 25
+            """)
+            rows = cur.fetchall()
+            print("Mismatched series vs map counts (top 25):")
+            for mid, mn, ta, tb, tas, tbs, mc in rows:
+                print(f"  #{mid} {mn} | {ta} {tas}-{tbs} {tb} | Maps rows: {mc}")
+        elif args.match_name or args.match_id is not None:
             print_match_summary(conn, args.match_name, args.match_id)
         else:
             cur = conn.cursor()
