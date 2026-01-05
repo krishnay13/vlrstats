@@ -30,29 +30,30 @@ def get_importance(tournament: str, stage: str, match_type: str) -> float:
     s = (stage or '').lower()
     m = (match_type or '').lower()
 
-    # Tournament category
+    # Tournament category (increase gap for internationals)
     if 'champions' in t:
-        t_w = 1.7
+        t_w = 2.0
     elif 'masters' in t:
-        t_w = 1.6
+        t_w = 1.8
     elif 'kickoff' in t or 'stage 1' in t or 'stage 2' in t:
         t_w = 1.0
     else:
         t_w = 1.0
 
     # Match type weighting within tournament
+    # Slightly reduced playoff multipliers
     if any(x in m for x in ['grand final']):
-        m_w = 1.5
+        m_w = 1.45
     elif any(x in m for x in ['lower final', 'upper final']):
-        m_w = 1.4
-    elif 'semifinal' in m or 'semi-final' in m:
         m_w = 1.35
+    elif 'semifinal' in m or 'semi-final' in m:
+        m_w = 1.30
     elif 'quarterfinal' in m or 'quarter-final' in m:
-        m_w = 1.3
+        m_w = 1.25
     elif 'playoffs' in m:
-        m_w = 1.2
-    elif any(x in m for x in ['elimination', 'decider']):
         m_w = 1.15
+    elif any(x in m for x in ['elimination', 'decider']):
+        m_w = 1.10
     elif any(x in m for x in ['week', 'group stage', 'swiss']):
         m_w = 1.0
     else:
@@ -73,6 +74,39 @@ def mov_multiplier(margin: int, rdiff: float) -> float:
     # Classic Elo MOV adjustment used in basketball elo
     # ln(1+margin) * 2.2 / (rdiff*0.001 + 2.2)
     return math.log(1 + max(1, margin)) * 2.2 / (abs(rdiff) * 0.001 + 2.2)
+
+
+def get_round_margin(cur: sqlite3.Cursor, match_id: int) -> float | None:
+    """Compute a normalized round-based margin for a match.
+
+    - Aggregates total rounds won for team A and B across played maps
+    - Normalizes by number of maps to get an average per-map round margin
+    - Scales down (divide by 2) and clamps to [1, 8] to prevent inflation
+    Returns None if map scores are unavailable.
+    """
+    try:
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(team_a_score), 0), COALESCE(SUM(team_b_score), 0), COUNT(*)
+            FROM Maps
+            WHERE match_id = ?
+            """,
+            (match_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        total_a, total_b, maps_played = row
+        # If both totals are zero or no maps, treat as unavailable
+        if ((total_a or 0) == 0 and (total_b or 0) == 0) or (maps_played or 0) == 0:
+            return None
+        raw_round_margin = abs(float(total_a) - float(total_b))
+        avg_round_margin = raw_round_margin / float(maps_played)
+        # Scale down and clamp to a sensible range
+        scaled = avg_round_margin / 2.0
+        return float(max(1.0, min(8.0, scaled)))
+    except Exception:
+        return None
 
 
 def compute_elo(save: bool = False, top: int = 20):
@@ -126,7 +160,10 @@ def compute_elo(save: bool = False, top: int = 20):
             rdiff = ra - rb
             k = K_BASE
             imp = get_importance(tournament or '', stage or '', match_type or '')
-            mult = mov_multiplier(margin, rdiff)
+            # Prefer round-based margin if available
+            round_margin = get_round_margin(cur, match_id)
+            use_margin = round_margin if round_margin is not None else float(margin)
+            mult = mov_multiplier(use_margin, rdiff)
             k_eff = k * imp * mult
 
             # Update ratings
@@ -134,8 +171,9 @@ def compute_elo(save: bool = False, top: int = 20):
             new_rb = rb + k_eff * (sb - exp_b)
 
             if save:
-                history_rows.append((match_id, a, b, ra, new_ra, exp_a, sa, margin, k_eff, imp))
-                history_rows.append((match_id, b, a, rb, new_rb, exp_b, sb, margin, k_eff, imp))
+                # Store the margin actually used (round-based if present)
+                history_rows.append((match_id, a, b, ra, new_ra, exp_a, sa, use_margin, k_eff, imp))
+                history_rows.append((match_id, b, a, rb, new_rb, exp_b, sb, use_margin, k_eff, imp))
 
             ratings[a] = new_ra
             ratings[b] = new_rb
@@ -146,6 +184,8 @@ def compute_elo(save: bool = False, top: int = 20):
             continue
 
     if save:
+        # Reset history before saving to avoid duplicates across runs
+        cur.execute("DELETE FROM Elo_History")
         cur.executemany(
             """
             INSERT INTO Elo_History (match_id, team, opponent, pre_rating, post_rating, expected, actual, margin, k_used, importance)
@@ -178,13 +218,16 @@ if __name__ == "__main__":
     parser.add_argument("--save", action="store_true", help="Save Elo history and current ratings to DB")
     parser.add_argument("--top", type=int, default=20, help="Number of top teams to display")
     parser.add_argument("--team", type=str, help="Show Elo history breakdown for a specific team")
+    parser.add_argument("--swings", action="store_true", help="Show largest positive/negative Elo swings")
+    parser.add_argument("--limit", type=int, default=10, help="Number of swings to display per direction")
     args = parser.parse_args()
     compute_elo(save=args.save, top=args.top)
 
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
     if args.team:
         team = normalize_team(args.team)
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
         cur.execute(
             """
             SELECT h.match_id, m.tournament, m.stage, m.match_type, m.match_name,
@@ -202,4 +245,78 @@ if __name__ == "__main__":
             delta = post - pre
             context = f"{tournament} | {stage} | {match_type}" if tournament or stage or match_type else ""
             print(f"#{match_id} {context} vs {opp}: pre {pre:.2f} -> post {post:.2f} (Δ {delta:+.2f}); exp {exp:.2f}, act {act:.2f}, margin {margin}, k_eff {k_used:.2f}, imp {imp:.2f}")
-        conn.close()
+
+    if args.swings:
+        if args.team:
+            team = normalize_team(args.team)
+            cur.execute(
+                """
+                SELECT h.match_id, m.tournament, m.stage, m.match_type, m.match_name,
+                       h.team, h.opponent, (h.post_rating - h.pre_rating) AS delta, h.expected, h.actual, h.margin, h.k_used, h.importance
+                FROM Elo_History h
+                LEFT JOIN Matches m ON m.match_id = h.match_id
+                WHERE LOWER(h.team) = LOWER(?)
+                ORDER BY delta DESC
+                LIMIT ?
+                """,
+                (team, args.limit),
+            )
+            pos_rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT h.match_id, m.tournament, m.stage, m.match_type, m.match_name,
+                       h.team, h.opponent, (h.post_rating - h.pre_rating) AS delta, h.expected, h.actual, h.margin, h.k_used, h.importance
+                FROM Elo_History h
+                LEFT JOIN Matches m ON m.match_id = h.match_id
+                WHERE LOWER(h.team) = LOWER(?)
+                ORDER BY delta ASC
+                LIMIT ?
+                """,
+                (team, args.limit),
+            )
+            neg_rows = cur.fetchall()
+            print(f"\nLargest swings for {team} (top {args.limit}):")
+            print("  Positive:")
+            for (match_id, tournament, stage, match_type, match_name, t, opp, delta, exp, act, margin, k_used, imp) in pos_rows:
+                context = f"{tournament} | {stage} | {match_type}"
+                print(f"    +{delta:.2f}  #{match_id} {context} vs {opp} (exp {exp:.2f}, act {act:.2f}, margin {margin}, k {k_used:.2f}, imp {imp:.2f})")
+            print("  Negative:")
+            for (match_id, tournament, stage, match_type, match_name, t, opp, delta, exp, act, margin, k_used, imp) in neg_rows:
+                context = f"{tournament} | {stage} | {match_type}"
+                print(f"    {delta:.2f}  #{match_id} {context} vs {opp} (exp {exp:.2f}, act {act:.2f}, margin {margin}, k {k_used:.2f}, imp {imp:.2f})")
+        else:
+            cur.execute(
+                """
+                SELECT h.match_id, m.tournament, m.stage, m.match_type, m.match_name,
+                       h.team, h.opponent, (h.post_rating - h.pre_rating) AS delta, h.expected, h.actual, h.margin, h.k_used, h.importance
+                FROM Elo_History h
+                LEFT JOIN Matches m ON m.match_id = h.match_id
+                ORDER BY delta DESC
+                LIMIT ?
+                """,
+                (args.limit,),
+            )
+            pos_rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT h.match_id, m.tournament, m.stage, m.match_type, m.match_name,
+                       h.team, h.opponent, (h.post_rating - h.pre_rating) AS delta, h.expected, h.actual, h.margin, h.k_used, h.importance
+                FROM Elo_History h
+                LEFT JOIN Matches m ON m.match_id = h.match_id
+                ORDER BY delta ASC
+                LIMIT ?
+                """,
+                (args.limit,),
+            )
+            neg_rows = cur.fetchall()
+            print(f"\nLargest swings overall (top {args.limit}):")
+            print("  Positive:")
+            for (match_id, tournament, stage, match_type, match_name, t, opp, delta, exp, act, margin, k_used, imp) in pos_rows:
+                context = f"{tournament} | {stage} | {match_type}"
+                print(f"    +{delta:.2f}  #{match_id} {t} vs {opp} — {context} (exp {exp:.2f}, act {act:.2f}, margin {margin}, k {k_used:.2f}, imp {imp:.2f})")
+            print("  Negative:")
+            for (match_id, tournament, stage, match_type, match_name, t, opp, delta, exp, act, margin, k_used, imp) in neg_rows:
+                context = f"{tournament} | {stage} | {match_type}"
+                print(f"    {delta:.2f}  #{match_id} {t} vs {opp} — {context} (exp {exp:.2f}, act {act:.2f}, margin {margin}, k {k_used:.2f}, imp {imp:.2f})")
+
+    conn.close()
