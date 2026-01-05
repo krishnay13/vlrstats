@@ -60,11 +60,8 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
         stage_match = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff)', stage_token, re.IGNORECASE)
         stage = stage_match.group(1) if stage_match else stage_token
 
-    scores_row = [match_id, event_name, stage, match_type, match_name, team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}"]
-
-    overview_rows = []
-    maps_played_rows = []
-    map_scores_rows = []
+    maps_info = []
+    players_info = []
     for game_div in soup.select('div.vm-stats-game'):
         game_id = game_div.get('data-game-id')
         if not game_id or game_id == 'all':
@@ -87,7 +84,6 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
             if re.search(rf"\b{re.escape(km)}\b", map_name, re.IGNORECASE):
                 map_name_clean = km
                 break
-        maps_played_rows.append([match_id, event_name, stage, match_type, match_name, map_name_clean])
 
         a_map_score = None
         b_map_score = None
@@ -120,8 +116,9 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
                         pass
                 if len(nums) >= 2:
                     a_map_score, b_map_score = nums[0], nums[1]
-        if a_map_score is not None and b_map_score is not None:
-            map_scores_rows.append([match_id, event_name, stage, match_type, match_name, map_name_clean, team_a, a_map_score, team_b, b_map_score])
+
+        # Store None when scores are missing to avoid misleading 0s
+        maps_info.append((match_id, game_id, map_name_clean, a_map_score if a_map_score is not None else None, b_map_score if b_map_score is not None else None))
 
         player_rows = game_div.select('table.wf-table-inset tbody tr')
         for row in player_rows:
@@ -154,24 +151,24 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
             kills = first_num(cells[4].get_text(), 0, as_int=True)
             deaths = first_num(cells[5].get_text(), 0, as_int=True)
             assists = first_num(cells[6].get_text(), 0, as_int=True)
-            kd = ''
-            kast = ''
-            adr = 0
-            hs = ''
-            fk = 0
-            fd = 0
-            fkd = ''
-            side = ''
-            overview_rows.append([match_id, event_name, stage, match_type, match_name, map_name_clean, player, team, agent, rating, acs, kills, deaths, assists, kd, kast, adr, hs, fk, fd, fkd, side])
 
-    return [scores_row, maps_played_rows, map_scores_rows], overview_rows
+            players_info.append((match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists))
+
+    # Fallback series score from per-map results if header parse failed
+    if (a_score == 0 and b_score == 0) and any(tas is not None and tbs is not None for _, _, _, tas, tbs in maps_info):
+        a_wins = sum(1 for _, _, _, tas, tbs in maps_info if tas is not None and tbs is not None and tas > tbs)
+        b_wins = sum(1 for _, _, _, tas, tbs in maps_info if tas is not None and tbs is not None and tbs > tas)
+        a_score, b_score = a_wins, b_wins
+
+    match_row = (match_id, event_name, stage, match_type, match_name, team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}")
+
+    return match_row, maps_info, players_info
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        all_scores = []
-        all_overview = []
-        all_maps_played = []
-        all_map_scores = []
+        all_matches = []
+        all_maps = []
+        all_player_stats = []
         sem = asyncio.Semaphore(10)
         for ev_url in VCT_2025_EVENTS:
             event_name = ev_url.split('/')[-1].replace('-', ' ').title()
@@ -199,31 +196,72 @@ async def main():
             tasks = [bounded_parse(mu) for mu in match_urls]
             try:
                 results = await asyncio.gather(*tasks)
-                for scores_sets, overview in results:
-                    all_scores.append(scores_sets[0])
-                    all_maps_played.extend(scores_sets[1])
-                    all_map_scores.extend(scores_sets[2])
-                    all_overview.extend(overview)
+                for match_row, maps_info, players_info in results:
+                    all_matches.append(match_row)
+                    all_maps.extend(maps_info)
+                    all_player_stats.extend(players_info)
             except Exception as e:
                 print(f"[ERR] parsing batch for {event_name}: {e}")
 
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
+
+        # Upsert matches (update scores if already present)
         cur.executemany('''
-            INSERT INTO Scores (match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score, match_result)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_scores)
-        cur.executemany('''
-            INSERT INTO Overview (match_id, tournament, stage, match_type, match_name, map, player, team, agents, rating, average_combat_score, kills, deaths, assists, kd, kast, adr, headshot_pct, first_kills, first_deaths, fkd, side)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_overview)
-        cur.executemany('''
-            INSERT INTO MapsPlayed (match_id, tournament, stage, match_type, match_name, map)
-            VALUES (?, ?, ?, ?, ?, ?)''', all_maps_played)
-        cur.executemany('''
-            INSERT INTO MapScores (match_id, tournament, stage, match_type, match_name, map, team_a, team_a_score, team_b, team_b_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', all_map_scores)
+            INSERT INTO Matches (match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score, match_result)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                tournament=excluded.tournament,
+                stage=excluded.stage,
+                match_type=excluded.match_type,
+                match_name=excluded.match_name,
+                team_a=excluded.team_a,
+                team_b=excluded.team_b,
+                team_a_score=excluded.team_a_score,
+                team_b_score=excluded.team_b_score,
+                match_result=excluded.match_result
+        ''', all_matches)
+
+        # Upsert maps and build (match_id, game_id) -> map_id mapping
+        map_id_lookup = {}
+        for match_id, game_id, map_name, ta_score, tb_score in all_maps:
+            cur.execute('''
+                INSERT INTO Maps (match_id, game_id, map, team_a_score, team_b_score)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(match_id, game_id) DO UPDATE SET
+                    map=excluded.map,
+                    team_a_score=excluded.team_a_score,
+                    team_b_score=excluded.team_b_score
+            ''', (match_id, game_id, map_name, ta_score, tb_score))
+            # Resolve the map_id reliably after upsert
+            cur.execute('SELECT id FROM Maps WHERE match_id = ? AND game_id = ?', (match_id, game_id))
+            row = cur.fetchone()
+            if row:
+                map_id_lookup[(match_id, game_id)] = row[0]
+
+        # Upsert player stats using resolved map_id
+        for match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists in all_player_stats:
+            map_id = map_id_lookup.get((match_id, game_id))
+            if map_id is None:
+                cur.execute('SELECT id FROM Maps WHERE match_id = ? AND game_id = ?', (match_id, game_id))
+                row = cur.fetchone()
+                map_id = row[0] if row else None
+            cur.execute('''
+                INSERT INTO Player_Stats (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(match_id, map_id, player) DO UPDATE SET
+                    team=excluded.team,
+                    agent=excluded.agent,
+                    rating=excluded.rating,
+                    acs=excluded.acs,
+                    kills=excluded.kills,
+                    deaths=excluded.deaths,
+                    assists=excluded.assists
+            ''', (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists))
+
         conn.commit()
         conn.close()
-        print(f"[OK] Inserted {len(all_scores)} scores, {len(all_map_scores)} map scores, {len(all_maps_played)} maps played, and {len(all_overview)} overview rows into the database.")
+        print(f"[OK] Inserted/Updated {len(all_matches)} matches, {len(all_maps)} maps, and {len(all_player_stats)} player stat rows into the database.")
 
 if __name__ == '__main__':
     asyncio.run(main())
