@@ -19,27 +19,25 @@ Valorant esports statistics platform with **Elo rating system** and **ML-based m
 pip install -r requirements.txt
 ```
 
-### 2. Scrape Fresh 2025 Data
+### 2. Ingest Matches (modular)
 ```bash
-# Scrape latest VCT 2025 matches
-python loadDB/scrape_2025_fresh.py
-
-# This creates: loadDB/matches_2025.txt
+# Ingest by match IDs or URLs from vlr.gg
+python -m loadDB.cli ingest 123456 123789
+python -m loadDB.cli ingest https://www.vlr.gg/123456 https://www.vlr.gg/123789
 ```
 
-### 3. Load Data into Database
+### 3. Build Elo Ratings
 ```bash
-# Process scraped matches
-python loadDB/LoadStats.py
-
-# Or reset and start fresh
-python reset_db_2025.py
+# Compute Elo (prints top teams). Use --save to persist snapshots/history
+python -m loadDB.cli elo compute --top 20 --save
 ```
 
-### 4. Build Elo Ratings
+### 4. Display Rankings
 ```bash
-# Recalculate Elo from match history
-python -c "from analytics.elo import EloEngine; EloEngine().recalc_from_history()"
+python -m loadDB.cli show top-teams -n 20
+python -m loadDB.cli show top-players -n 20
+python -m loadDB.cli show team-history "G2 Esports"
+python -m loadDB.cli show player-history "trent"
 ```
 
 ### 5. Train ML Models
@@ -91,14 +89,16 @@ POST /api/elo/recalculate      # Rebuild all Elo ratings
 │   └── predict.py                 # Inference
 │
 ├── loadDB/                         # Data scraping & loading
-│   ├── scrape_2025_fresh.py       # VCT 2025 scraper (improved)
-│   ├── LoadStats.py               # Load matches into DB
-│   ├── db_init.py                 # Database schema
-│   ├── MatchScraper.py            # Tournament scraper
-│   ├── main.py                    # URL preprocessing
-│   ├── matches_2025.txt           # Scraped match URLs
-│   ├── matches.txt                # Legacy match IDs
-│   └── full_matches.txt           # Legacy full URLs
+│   ├── cli.py                     # Unified CLI (ingest, elo, show)
+│   ├── config.py                  # Central config (DB path, Elo constants, aliases)
+│   ├── aliases.json               # Team alias normalization map
+│   ├── vlr_ingest.py              # Ingest single matches by ID/URL
+│   ├── db_utils.py                # Upsert helpers and schema ensure
+│   ├── elo.py                     # Team/Player Elo computation
+│   ├── display.py                 # Read-only display helpers
+│   ├── backfill.py                # Timestamp backfill scaffold
+│   ├── db_cleanup.py              # Drop legacy tables (if any)
+│   └── scrape.py                  # Batch/event scraper (legacy bulk)
 │
 ├── models/                         # Trained ML models
 │   ├── match_outcome.pkl

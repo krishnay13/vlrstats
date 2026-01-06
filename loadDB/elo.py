@@ -5,57 +5,27 @@ import sqlite3
 from collections import defaultdict
 from statistics import mean
 import unicodedata
+from .config import (
+    DB_PATH,
+    START_ELO,
+    K_BASE,
+    PLAYER_START_ELO,
+    K_PLAYER_BASE,
+    PLAYER_INFLUENCE_BETA,
+    PLAYER_WEIGHT_EQUAL_BLEND,
+    PLAYER_MAX_SHARE_FRACTION,
+    RATING_RELATIVE_CLIP_LOW,
+    RATING_RELATIVE_CLIP_HIGH,
+    PLAYER_RATING_WEIGHT,
+    PLAYER_ACS_WEIGHT,
+    PLAYER_PERF_LOGIT_BETA,
+    WIN_LOSS_WEIGHT,
+    PLAYER_DELTA_CAP,
+    PLAYER_SEED_SCALE,
+    TEAM_ALIASES,
+)
 
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'valorant_esports.db'))
-
-START_ELO = 1500.0
-K_BASE = 25.0
-PLAYER_START_ELO = 1500.0
-K_PLAYER_BASE = 18.0
-PLAYER_INFLUENCE_BETA = 0.15  # how much roster avg player Elo nudges team rating
-PLAYER_SHARE = 0.8            # fraction of team Elo delta distributed to players
-# Player rating-only distribution controls
-PLAYER_WEIGHT_EQUAL_BLEND = 0.5  # blend between equal share and rating-proportional weights
-PLAYER_MAX_SHARE_FRACTION = 0.35 # cap to ensure no single player dominates team delta
-RATING_RELATIVE_CLIP_LOW = 0.6   # clip relative rating lower bound (vs team mean)
-RATING_RELATIVE_CLIP_HIGH = 1.3  # clip relative rating upper bound (vs team mean)
-# Player performance-only Elo (independent from team delta)
-PLAYER_RATING_WEIGHT = 0.85  # rating dominates
-PLAYER_ACS_WEIGHT = 0.15     # modest ACS contribution
-PLAYER_PERF_LOGIT_BETA = 4.0  # sensitivity of perf ratio mapping to [0,1]
-WIN_LOSS_WEIGHT = 0.05        # very small W/L contribution
-PLAYER_DELTA_CAP = 20.0       # cap per-match change in player Elo
-PLAYER_SEED_SCALE = 100.0     # seed missing player ratings from avg rating vs global avg
-
-
-TEAM_ALIASES = {
-    # Normalize variations to canonical names
-    # Bilibili Gaming and variants
-    'guangzhou huadu bilibili gaming(bilibili gaming)': 'Bilibili Gaming',
-    'guangzhou huadu bilibili gaming': 'Bilibili Gaming',
-    'bilibili gaming': 'Bilibili Gaming',
-    # Common abbreviations to full names
-    'g2': 'G2 Esports',
-    'tl': 'Team Liquid',
-    'fnc': 'FNATIC',
-    't1': 'T1',
-    'sen': 'Sentinels',
-    'rrq': 'Rex Regum Qeon',
-    'prx': 'Paper Rex',
-    'edg': 'EDward Gaming',
-    'drx': 'DRX',
-    'blg': 'Bilibili Gaming',
-    'mibr': 'MIBR',
-    'xlg': 'Xi Lai Gaming',
-    'th': 'Team Heretics',
-    'gx': 'GIANTX',
-    'nrg': 'NRG',
-    'loud': 'LOUD',
-    'kru': 'KRÜ Esports',
-    'kru esports': 'KRÜ Esports',
-    'visa kru': 'KRÜ Esports',
-    'visa kru esports': 'KRÜ Esports',
-}
+ 
 
 def normalize_team(name: str | None) -> str:
     if not name:
