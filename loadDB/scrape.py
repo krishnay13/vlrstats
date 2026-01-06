@@ -4,6 +4,18 @@ from bs4 import BeautifulSoup
 import re
 import sqlite3
 import os
+import sys
+
+MSG = (
+    "This bulk/event scraper is deprecated.\n"
+    "Use the modular CLI instead:\n"
+    "  python -m loadDB.cli ingest <match_id_or_url> ...\n"
+    "  python -m loadDB.cli elo compute --save\n"
+)
+
+def main():
+    sys.stderr.write(MSG)
+    raise SystemExit(1)
 
 base_dir = os.path.dirname(__file__)
 DB_PATH = os.path.abspath(os.path.join(base_dir, '..', 'valorant_esports.db'))
@@ -272,4 +284,5 @@ async def main():
         print(f"[OK] Inserted/Updated {len(all_matches)} matches, {len(all_maps)} maps, and {len(all_player_stats)} player stat rows into the database.")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
+    # asyncio.run(main())  # Commenting out the original main function call

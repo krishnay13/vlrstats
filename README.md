@@ -98,7 +98,7 @@ POST /api/elo/recalculate      # Rebuild all Elo ratings
 │   ├── display.py                 # Read-only display helpers
 │   ├── backfill.py                # Timestamp backfill scaffold
 │   ├── db_cleanup.py              # Drop legacy tables (if any)
-│   └── scrape.py                  # Batch/event scraper (legacy bulk)
+│   └── _legacy/                   # Archived legacy utilities (deprecated)
 │
 ├── models/                         # Trained ML models
 │   ├── match_outcome.pkl

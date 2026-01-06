@@ -1,12 +1,4 @@
-import asyncio
-import aiohttp
-from bs4 import BeautifulSoup
-import re
-import sqlite3
-import os
-
-BASE_DIR = os.path.dirname(__file__)
-DB_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'valorant_esports.db'))
+import sys
 
 # Explicit VCT 2025 events (matches pages) for broader coverage, excluding showmatches later.
 VCT_2025_EVENTS = [
@@ -197,7 +189,12 @@ async def parse_match(session: aiohttp.ClientSession, event_name: str, match_url
             overview_rows.append([match_id, event_name, stage, match_type, match_name, map_name_clean, player, team, agent, rating, acs, kills, deaths, assists, kd, kast, adr, hs, fk, fd, fkd, side])
     return [scores_row, maps_played_rows, map_scores_rows], overview_rows
 
-async def main():
+def main():
+    sys.stderr.write(
+        "This overview scraper is deprecated.\n"
+        "Use: python -m loadDB.cli ingest <match_id_or_url> ...\n"
+    )
+    raise SystemExit(1)
     # Use explicit event list for full coverage
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
