@@ -88,6 +88,34 @@ def setup_database():
     )
     ''')
 
+    # Player Elo rating tables
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Player_Elo_History (
+        id INTEGER PRIMARY KEY,
+        match_id INTEGER,
+        player TEXT,
+        team TEXT,
+        opponent_team TEXT,
+        pre_rating REAL,
+        post_rating REAL,
+        expected REAL,
+        actual REAL,
+        margin REAL,
+        k_used REAL,
+        importance REAL
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Player_Elo_Current (
+        player TEXT PRIMARY KEY,
+        team TEXT,
+        rating REAL,
+        matches INTEGER,
+        last_match_id INTEGER
+    )
+    ''')
+
     conn.commit()
     return conn
 
