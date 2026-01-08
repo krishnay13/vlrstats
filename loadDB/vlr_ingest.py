@@ -12,23 +12,70 @@ def match_id_from_url(url: str) -> int | None:
 
 
 async def fetch_html(session: aiohttp.ClientSession, url: str) -> str:
-    async with session.get(url, timeout=20) as resp:
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'Referer': 'https://www.vlr.gg/'
+    }
+    async with session.get(url, timeout=20, headers=headers) as resp:
         resp.raise_for_status()
         return await resp.text()
 
 
 def _parse_dt_utc(soup: BeautifulSoup) -> str | None:
-    # Try common patterns on vlr.gg pages
-    t = soup.select_one('.match-header-date .moment-tz-convert')
-    if t and t.has_attr('data-utc-ts'):
+    # Try modern/common patterns on vlr.gg pages
+    # 1) Any element with data-utc-ts attribute
+    any_ts = soup.select('[data-utc-ts]')
+    for el in any_ts:
+        val = el.get('data-utc-ts')
+        if not val:
+            continue
+        # Try epoch integer first
         try:
-            ts = int(t['data-utc-ts'])
+            ts = int(str(val).strip())
             return datetime.utcfromtimestamp(ts).isoformat() + 'Z'
         except Exception:
             pass
-    if t and t.get_text(strip=True):
-        raw = t.get_text(' ', strip=True)
-        for fmt in ("%b %d, %Y - %H:%M %Z", "%b %d, %Y - %H:%M"):
+        # Then common datetime string formats observed on vlr.gg
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M'):
+            try:
+                dt = datetime.strptime(val.strip(), fmt)
+                return dt.isoformat() + 'Z'
+            except Exception:
+                continue
+    # 2) Specific header selector used historically
+    t = soup.select_one('.match-header-date .moment-tz-convert')
+    if t and t.has_attr('data-utc-ts'):
+        tv = t['data-utc-ts']
+        try:
+            ts = int(str(tv).strip())
+            return datetime.utcfromtimestamp(ts).isoformat() + 'Z'
+        except Exception:
+            pass
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M'):
+            try:
+                dt = datetime.strptime(str(tv).strip(), fmt)
+                return dt.isoformat() + 'Z'
+            except Exception:
+                continue
+    # 3) time tags with datetime attribute
+    time_tags = soup.find_all('time')
+    for tm in time_tags:
+        val = tm.get('datetime') or tm.get('data-datetime')
+        if val:
+            try:
+                # Try parse ISO-like values
+                # Keep as-is but ensure Z suffix if naive
+                if val.endswith('Z'):
+                    return val
+                # naive ISO → treat as UTC
+                return val + 'Z'
+            except Exception:
+                continue
+    # 4) Fallback: attempt to parse visible header text
+    header = soup.select_one('.match-header-date') or soup.select_one('.match-header')
+    if header:
+        raw = header.get_text(' ', strip=True)
+        for fmt in ("%b %d, %Y - %H:%M %Z", "%b %d, %Y - %H:%M", "%B %d, %Y"):
             try:
                 dt = datetime.strptime(raw, fmt)
                 return dt.isoformat() + 'Z'
@@ -80,6 +127,7 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         stage = m.group(1) if m else stage_token
 
     dt_utc = _parse_dt_utc(soup)
+    date_str = dt_utc[:10] if dt_utc else None
 
     maps_info: list[tuple] = []
     players_info: list[tuple] = []
@@ -152,7 +200,7 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
 
     match_row = (
         mid, tournament, stage, match_type, match_name,
-        team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}", dt_utc
+        team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}", dt_utc, date_str
     )
     return match_row, maps_info, players_info
 

@@ -311,12 +311,17 @@ def compute_elo(save: bool = False, top: int = 20):
     cur = conn.cursor()
 
     # Load matches; without timestamps we approximate order by match_id
-    cur.execute("""
+    cur.execute(
+        """
         SELECT match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score
         FROM Matches
         WHERE team_a IS NOT NULL AND team_b IS NOT NULL
-        ORDER BY match_id ASC
-    """)
+        ORDER BY
+          CASE WHEN match_date IS NOT NULL AND match_date <> '' THEN 0 ELSE 1 END,
+          match_date ASC,
+          match_id ASC
+        """
+    )
     matches = cur.fetchall()
 
     ratings = defaultdict(lambda: START_ELO)

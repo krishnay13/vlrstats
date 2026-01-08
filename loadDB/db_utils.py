@@ -13,6 +13,9 @@ def ensure_matches_columns(conn: sqlite3.Connection) -> None:
     if 'match_ts_utc' not in cols:
         cur.execute("ALTER TABLE Matches ADD COLUMN match_ts_utc TEXT")
         conn.commit()
+    if 'match_date' not in cols:
+        cur.execute("ALTER TABLE Matches ADD COLUMN match_date TEXT")
+        conn.commit()
 
 
 def upsert_match(conn: sqlite3.Connection, row: tuple) -> None:
@@ -20,8 +23,8 @@ def upsert_match(conn: sqlite3.Connection, row: tuple) -> None:
         """
         INSERT INTO Matches (
             match_id, tournament, stage, match_type, match_name,
-            team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(match_id) DO UPDATE SET
             tournament=excluded.tournament,
             stage=excluded.stage,
@@ -32,7 +35,8 @@ def upsert_match(conn: sqlite3.Connection, row: tuple) -> None:
             team_a_score=excluded.team_a_score,
             team_b_score=excluded.team_b_score,
             match_result=excluded.match_result,
-            match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc)
+            match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
+            match_date=COALESCE(excluded.match_date, match_date)
         """
     )
     conn.execute(sql, row)
