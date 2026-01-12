@@ -11,8 +11,18 @@ from loadDB.vlr_ingest import scrape_match, fetch_html
 
 
 def get_one_missing_match_id(conn: sqlite3.Connection) -> Optional[int]:
+    """
+    Get a match ID that is missing timestamp data.
+    
+    Prefers recent match IDs (ordered by match_id DESC).
+    
+    Args:
+        conn: Database connection
+    
+    Returns:
+        Match ID if found, None otherwise
+    """
     cur = conn.cursor()
-    # Prefer recent IDs; adjust as needed
     cur.execute(
         "SELECT match_id FROM matches WHERE match_ts_utc IS NULL ORDER BY match_id DESC LIMIT 1"
     )
@@ -21,6 +31,15 @@ def get_one_missing_match_id(conn: sqlite3.Connection) -> Optional[int]:
 
 
 def update_match_ts_date(conn: sqlite3.Connection, match_id: int, ts: Optional[str], date: Optional[str]) -> None:
+    """
+    Update match timestamp and date in database.
+    
+    Args:
+        conn: Database connection
+        match_id: Match ID to update
+        ts: UTC timestamp string
+        date: Date string
+    """
     cur = conn.cursor()
     cur.execute(
         "UPDATE matches SET match_ts_utc = ?, match_date = ? WHERE match_id = ?",

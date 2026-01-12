@@ -8,10 +8,32 @@ DEFAULT_PLAYER_ELO = 1500.0
 
 
 def expected_score(rating_a: float, rating_b: float) -> float:
+    """
+    Calculate expected score for player/team A against player/team B using Elo formula.
+    
+    Args:
+        rating_a: Elo rating of player/team A
+        rating_b: Elo rating of player/team B
+    
+    Returns:
+        Expected score (0.0 to 1.0) for player/team A
+    """
     return 1.0 / (1.0 + 10.0 ** (-(rating_a - rating_b) / 400.0))
 
 
 def update_rating(current: float, score: float, expected: float, k: float) -> float:
+    """
+    Update Elo rating based on match result.
+    
+    Args:
+        current: Current Elo rating
+        score: Actual score (1.0 for win, 0.0 for loss)
+        expected: Expected score from expected_score()
+        k: K-factor (sensitivity of rating changes)
+    
+    Returns:
+        Updated Elo rating
+    """
     return current + k * (score - expected)
 
 
@@ -25,10 +47,15 @@ class EloEngine:
         return sqlite3.connect(self.db_path)
 
     def ensure_schema(self):
+        """
+        Ensure database schema has required Elo columns and history tables.
+        
+        Adds team_elo and player_elo columns if missing, and creates
+        EloHistoryTeam and EloHistoryPlayer tables for tracking rating changes.
+        """
         con = self._connect()
         cur = con.cursor()
 
-        # Add ELO columns if they do not exist
         def ensure_column(table: str, col: str, col_type: str, default_value: float):
             cur.execute(f"PRAGMA table_info({table})")
             cols = [r[1] for r in cur.fetchall()]
@@ -37,8 +64,6 @@ class EloEngine:
 
         ensure_column('Teams', 'team_elo', 'REAL', DEFAULT_TEAM_ELO)
         ensure_column('Players', 'player_elo', 'REAL', DEFAULT_PLAYER_ELO)
-
-        # Create history tables
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS EloHistoryTeam (

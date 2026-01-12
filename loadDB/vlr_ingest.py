@@ -7,11 +7,33 @@ from .db_utils import get_conn, ensure_matches_columns, upsert_match, upsert_map
 
 
 def match_id_from_url(url: str) -> int | None:
+    """
+    Extract match ID from a VLR.gg URL.
+    
+    Args:
+        url: URL containing a match ID (e.g., "https://www.vlr.gg/427991/match-name")
+    
+    Returns:
+        Match ID as integer if found, None otherwise
+    """
     m = re.search(r"/([0-9]+)/", url)
     return int(m.group(1)) if m else None
 
 
 async def fetch_html(session: aiohttp.ClientSession, url: str) -> str:
+    """
+    Fetch HTML from a URL with proper headers to mimic browser requests.
+    
+    Args:
+        session: aiohttp client session
+        url: URL to fetch
+    
+    Returns:
+        HTML content as string
+    
+    Raises:
+        aiohttp.ClientError: If the request fails
+    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
         'Referer': 'https://www.vlr.gg/'
@@ -22,27 +44,37 @@ async def fetch_html(session: aiohttp.ClientSession, url: str) -> str:
 
 
 def _parse_dt_utc(soup: BeautifulSoup) -> str | None:
-    # Try modern/common patterns on vlr.gg pages
-    # 1) Any element with data-utc-ts attribute
+    """
+    Parse UTC datetime from vlr.gg match page using multiple fallback strategies.
+    
+    Attempts to extract datetime in this order:
+    1. Elements with data-utc-ts attribute (epoch integer or datetime string)
+    2. Specific header selector (.match-header-date .moment-tz-convert)
+    3. Time tags with datetime or data-datetime attributes
+    4. Visible header text parsing
+    
+    Args:
+        soup: BeautifulSoup parsed HTML
+    
+    Returns:
+        ISO format datetime string with 'Z' suffix (UTC), or None if not found
+    """
     any_ts = soup.select('[data-utc-ts]')
     for el in any_ts:
         val = el.get('data-utc-ts')
         if not val:
             continue
-        # Try epoch integer first
         try:
             ts = int(str(val).strip())
             return datetime.utcfromtimestamp(ts).isoformat() + 'Z'
         except Exception:
             pass
-        # Then common datetime string formats observed on vlr.gg
         for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M'):
             try:
                 dt = datetime.strptime(val.strip(), fmt)
                 return dt.isoformat() + 'Z'
             except Exception:
                 continue
-    # 2) Specific header selector used historically
     t = soup.select_one('.match-header-date .moment-tz-convert')
     if t and t.has_attr('data-utc-ts'):
         tv = t['data-utc-ts']
@@ -57,21 +89,16 @@ def _parse_dt_utc(soup: BeautifulSoup) -> str | None:
                 return dt.isoformat() + 'Z'
             except Exception:
                 continue
-    # 3) time tags with datetime attribute
     time_tags = soup.find_all('time')
     for tm in time_tags:
         val = tm.get('datetime') or tm.get('data-datetime')
         if val:
             try:
-                # Try parse ISO-like values
-                # Keep as-is but ensure Z suffix if naive
                 if val.endswith('Z'):
                     return val
-                # naive ISO → treat as UTC
                 return val + 'Z'
             except Exception:
                 continue
-    # 4) Fallback: attempt to parse visible header text
     header = soup.select_one('.match-header-date') or soup.select_one('.match-header')
     if header:
         raw = header.get_text(' ', strip=True)
@@ -85,6 +112,15 @@ def _parse_dt_utc(soup: BeautifulSoup) -> str | None:
 
 
 def _clean_map_name(text: str) -> str:
+    """
+    Normalize map name to a known canonical form.
+    
+    Args:
+        text: Raw map name text from HTML
+    
+    Returns:
+        Canonical map name if recognized, otherwise cleaned text
+    """
     KNOWN = ['Ascent', 'Bind', 'Breeze', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset', 'Abyss', 'Corrode']
     for km in KNOWN:
         if re.search(rf"\b{re.escape(km)}\b", text, re.IGNORECASE):
@@ -93,6 +129,18 @@ def _clean_map_name(text: str) -> str:
 
 
 async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], list[tuple]]:
+    """
+    Scrape match data from vlr.gg.
+    
+    Args:
+        match_id_or_url: Match ID (integer) or full URL string
+    
+    Returns:
+        Tuple of (match_row, maps_info, players_info):
+        - match_row: Tuple with match metadata (match_id, tournament, stage, match_type, match_name, team_a, team_b, scores, result, match_ts_utc, match_date)
+        - maps_info: List of tuples (match_id, game_id, map_name, team_a_score, team_b_score)
+        - players_info: List of tuples (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
+    """
     url = f"https://www.vlr.gg/{match_id_or_url}" if isinstance(match_id_or_url, int) else str(match_id_or_url)
     mid = match_id_from_url(url) if not isinstance(match_id_or_url, int) else match_id_or_url
     async with aiohttp.ClientSession() as session:
@@ -115,13 +163,11 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
     match_name_elem = soup.select_one('.match-header-event')
     match_name = match_name_elem.get_text(' ', strip=True) if match_name_elem else url.split('/')[-1]
     stage = ''
-    match_type_parsed = ''  # Old parsed match type (kept for reference but not used in match_type field)
     tournament = ''
     parts = [p.strip() for p in match_name.split(':')]
     if parts:
         tournament = parts[0]
     if len(parts) >= 2:
-        match_type_parsed = parts[-1]
         stage_token = parts[-2]
         m = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff)', stage_token, re.IGNORECASE)
         stage = m.group(1) if m else stage_token
@@ -198,17 +244,24 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         if (a_score + b_score) < 2 or (a_score + b_score) != (a_w + b_w):
             a_score, b_score = a_w, b_w
 
-    # match_type will be set during ingestion based on classification
-    # For now, set to empty string - it will be replaced with VCT/VCL/OFFSEASON/SHOWMATCH
     match_row = (
-        mid, tournament, stage, '', match_name,  # match_type set to '' initially
+        mid, tournament, stage, '', match_name,
         team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}", dt_utc, date_str
     )
     return match_row, maps_info, players_info
 
 
 def _detect_showmatch(match_name: str, tournament: str = '') -> bool:
-    """Detect if a match is a showmatch based on name and tournament."""
+    """
+    Detect if a match is a showmatch based on name and tournament.
+    
+    Args:
+        match_name: Name of the match
+        tournament: Tournament name
+    
+    Returns:
+        True if match appears to be a showmatch, False otherwise
+    """
     text = f"{tournament} {match_name}".lower()
     showmatch_indicators = [
         'showmatch', 'show match', 'show-match',
@@ -219,19 +272,28 @@ def _detect_showmatch(match_name: str, tournament: str = '') -> bool:
 
 
 async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = None) -> None:
+    """
+    Ingest matches from vlr.gg into the database.
+    
+    Auto-detects match type (VCT/VCL/OFFSEASON/SHOWMATCH) if not provided by analyzing
+    tournament name and match name for showmatch indicators.
+    
+    Args:
+        ids_or_urls: List of match IDs (integers) or URLs (strings)
+        match_type: Optional match type classification (VCT, VCL, OFFSEASON, SHOWMATCH).
+                   If None, will be auto-detected.
+    """
     conn = get_conn()
     ensure_matches_columns(conn)
     for item in ids_or_urls:
         match_row, maps_info, players_info = await scrape_match(item)
         
-        # Auto-detect match type if not provided
         if not match_type:
             match_name = match_row[4] if len(match_row) > 4 else ''
             tournament = match_row[1] if len(match_row) > 1 else ''
             if _detect_showmatch(match_name, tournament):
                 match_type = 'SHOWMATCH'
             else:
-                # Determine based on tournament name
                 tournament_lower = tournament.lower()
                 if 'vct' in tournament_lower or 'champions tour' in tournament_lower:
                     match_type = 'VCT'
@@ -240,10 +302,8 @@ async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = 
                 elif 'offseason' in tournament_lower:
                     match_type = 'OFFSEASON'
                 else:
-                    # Default to VCT for VCT pages
                     match_type = 'VCT'
         
-        # Replace match_type in match_row (index 3)
         match_row_list = list(match_row)
         match_row_list[3] = match_type
         match_row = tuple(match_row_list)
@@ -256,4 +316,11 @@ async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = 
 
 
 def ingest(ids_or_urls: list[str | int], match_type: str | None = None) -> None:
+    """
+    Synchronous wrapper for ingest_matches.
+    
+    Args:
+        ids_or_urls: List of match IDs (integers) or URLs (strings)
+        match_type: Optional match type classification (VCT, VCL, OFFSEASON, SHOWMATCH)
+    """
     asyncio.run(ingest_matches(ids_or_urls, match_type))

@@ -4,6 +4,20 @@ from bs4 import BeautifulSoup
 
 
 async def _fetch(session, url: str, semaphore: asyncio.Semaphore) -> Tuple[str, str]:
+    """
+    Fetch HTML from a URL with rate limiting via semaphore.
+    
+    Args:
+        session: aiohttp client session
+        url: URL to fetch
+        semaphore: Semaphore for rate limiting
+    
+    Returns:
+        Tuple of (url, html_text)
+    
+    Raises:
+        aiohttp.ClientError: If the request fails
+    """
     async with semaphore:
         async with session.get(url, timeout=20) as resp:
             resp.raise_for_status()
@@ -12,8 +26,14 @@ async def _fetch(session, url: str, semaphore: asyncio.Semaphore) -> Tuple[str, 
 
 
 def _parse_match(html: str) -> Dict[str, Any]:
-    """Parse a single VLR.gg match page into minimal fields.
-    Returns keys: match_name, team_a, team_b, team_a_score, team_b_score, players
+    """
+    Parse a single VLR.gg match page into minimal fields.
+    
+    Args:
+        html: HTML content of match page
+    
+    Returns:
+        Dictionary with keys: match_name, team_a, team_b, team_a_score, team_b_score, players
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -100,7 +120,20 @@ async def scraping_matches_data(
 ) -> List[Dict[str, List[Any]]]:
     """
     Async scrape matches for a tournament, returning buckets matching the external script.
-    Only populates minimal buckets: scores and overview; others empty.
+    
+    Only populates minimal buckets: scores and overview; others are empty lists.
+    Extracts match URLs from card elements and fetches them concurrently.
+    
+    Args:
+        tournament_name: Name of the tournament
+        cards: List of card elements containing match links
+        tournaments_ids: Tournament ID mapping (unused in minimal implementation)
+        stages_ids: Stage ID mapping (unused in minimal implementation)
+        matches_semaphore: Semaphore for rate limiting
+        session: aiohttp client session
+    
+    Returns:
+        List containing a single dictionary with match data buckets
     """
     base = "https://www.vlr.gg"
     match_urls: List[str] = []
@@ -191,10 +224,21 @@ async def scraping_matches_data(
     }]
 
 
-# Placeholders for player stats logic to satisfy imports
 async def generate_urls_combination(*args, **kwargs):
+    """
+    Placeholder function to satisfy imports.
+    
+    Returns:
+        None
+    """
     return None
 
 
 async def scraping_players_stats(*args, **kwargs):
+    """
+    Placeholder function to satisfy imports.
+    
+    Returns:
+        Empty list
+    """
     return []

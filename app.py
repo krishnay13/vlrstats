@@ -13,6 +13,12 @@ predictor = Predictor(DATABASE)
 
 
 def get_db():
+    """
+    Get database connection from Flask application context.
+    
+    Returns:
+        SQLite database connection
+    """
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = sqlite3.connect(DATABASE)
@@ -21,6 +27,12 @@ def get_db():
 
 @app.teardown_appcontext
 def close_connection(exception):
+    """
+    Close database connection when Flask request context ends.
+    
+    Args:
+        exception: Exception that occurred, if any
+    """
     db = getattr(g, '_database', None)
     if db is not None:
         db.close()
@@ -28,11 +40,18 @@ def close_connection(exception):
 
 @app.route('/')
 def index():
+    """Home page route."""
     return "Welcome to the Valorant Esports Stats Portal!"
 
 
 @app.route('/matches')
 def show_matches():
+    """
+    Display all matches from the database.
+    
+    Returns:
+        Rendered matches.html template with match data
+    """
     db = get_db()
     cursor = db.cursor()
     cursor.execute('SELECT * FROM Matches')

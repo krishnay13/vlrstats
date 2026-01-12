@@ -5,6 +5,14 @@ import asyncio
 
 
 def backfill_missing_timestamps(limit: int = 100):
+    """
+    Backfill missing timestamps by scraping matches from vlr.gg.
+    
+    Only updates matches where match_ts_utc is NULL to avoid overwriting existing data.
+    
+    Args:
+        limit: Maximum number of matches to process
+    """
     conn = get_conn()
     ensure_matches_columns(conn)
     cur = conn.cursor()
@@ -18,9 +26,7 @@ def backfill_missing_timestamps(limit: int = 100):
     async def run(ids_):
         for mid in ids_:
             match_row, maps_info, players_info = await scrape_match(mid)
-            # only update timestamp for safety
             cur2 = conn.cursor()
-            # match_row structure ends with (match_ts_utc, match_date)
             ts_utc = match_row[-2]
             cur2.execute(
                 "UPDATE Matches SET match_ts_utc = ? WHERE match_id = ? AND match_ts_utc IS NULL",

@@ -18,14 +18,26 @@ MODELS_DIR = 'models'
 
 
 def ensure_models_dir():
+    """Create models directory if it doesn't exist."""
     os.makedirs(MODELS_DIR, exist_ok=True)
 
 
 def collect_datasets(db_path: str = DB_PATH):
+    """
+    Collect training datasets by iterating matches chronologically and computing Elo ratings.
+    
+    Builds datasets for both match outcome prediction and player performance prediction.
+    Elo ratings are computed incrementally as matches are processed.
+    
+    Args:
+        db_path: Path to database file
+    
+    Returns:
+        Tuple of (match_df, player_df) DataFrames with features and targets
+    """
     con = sqlite3.connect(db_path)
     cur = con.cursor()
 
-    # iterate matches chronologically
     cur.execute("SELECT match_id, team1_name, team2_name, team1_score, team2_score FROM Matches ORDER BY match_id ASC")
     matches = cur.fetchall()
 
@@ -48,7 +60,6 @@ def collect_datasets(db_path: str = DB_PATH):
             'team1_win': 1 if (s1 is not None and s2 is not None and s1 > s2) else 0
         })
 
-        # collect player samples for match totals
         cur.execute(
             """
             SELECT ps.player_id, ps.kills, ps.deaths, ps.assists, ps.acs, ps.rating, ps.adr, ps.fk, ps.fd
@@ -73,7 +84,6 @@ def collect_datasets(db_path: str = DB_PATH):
                 'fd': int(fd) if fd is not None else 0,
             })
 
-        # update elos after match for future rows
         if s1 is None or s2 is None:
             continue
         winner = 1 if s1 > s2 else 2
@@ -86,7 +96,6 @@ def collect_datasets(db_path: str = DB_PATH):
         team_elo[t1] = r1_post
         team_elo[t2] = r2_post
 
-        # simple player update baseline so pre values evolve
         cur.execute("SELECT player_id, rating FROM Player_Stats WHERE match_id = ? AND map_id IS NULL", (match_id,))
         rows = cur.fetchall()
         team_avg = np.mean([float(r or 1.0) for _, r in rows]) if rows else 1.0
@@ -94,7 +103,7 @@ def collect_datasets(db_path: str = DB_PATH):
             pre = player_elo.get(pid, DEFAULT_PLAYER_ELO)
             scale = float(rating or 1.0) / (team_avg or 1.0)
             k_eff = max(8.0, min(24.0 * scale, 48.0))
-            res = score1  # approximate same result for all; detailed mapping requires team info
+            res = score1
             post = update_rating(pre, res, 0.5, k_eff)
             player_elo[pid] = post
 
@@ -103,10 +112,19 @@ def collect_datasets(db_path: str = DB_PATH):
 
 
 def train_and_save():
+    """
+    Train and save machine learning models for match outcome and player performance prediction.
+    
+    Trains:
+    - Match outcome classifier (LogisticRegression) using team Elo ratings
+    - Player kills regressor (RandomForestRegressor) using player Elo and stats
+    
+    Models are saved to the models directory with associated metrics files.
+    Falls back to minimal models if insufficient training data is available.
+    """
     ensure_models_dir()
     df_match, df_player = collect_datasets()
 
-    # Match outcome model
     match_feats = df_match[['team1_elo_pre', 'team2_elo_pre', 'elo_diff']].values
     match_target = df_match['team1_win'].values
     if len(df_match) >= 20 and match_target.sum() > 0 and match_target.sum() < len(match_target):
@@ -123,15 +141,12 @@ def train_and_save():
         with open(os.path.join(MODELS_DIR, 'match_outcome.metrics.txt'), 'w') as f:
             f.write(f"accuracy={acc:.4f}\nauc={auc:.4f}\n")
     else:
-        # not enough data; still save a trivial prior-based model
         clf = LogisticRegression(max_iter=1)
-        # hack: fit on a tiny synthetic sample if needed
         X = np.array([[0, 0, 0], [100, -100, 200]])
         y = np.array([0, 1])
         clf.fit(X, y)
         joblib.dump(clf, os.path.join(MODELS_DIR, 'match_outcome.pkl'))
 
-    # Player kills regression
     if len(df_player) >= 50:
         feat_cols = ['player_elo_pre', 'deaths', 'assists', 'acs', 'rating', 'adr', 'fk', 'fd']
         X = df_player[feat_cols].values
@@ -147,7 +162,6 @@ def train_and_save():
             f.write(f"r2={r2:.4f}\nmae={mae:.4f}\n")
     else:
         reg = RandomForestRegressor(n_estimators=10, random_state=42)
-        # minimal fit to persist
         reg.fit(np.zeros((2, 8)), np.array([10.0, 15.0]))
         joblib.dump(reg, os.path.join(MODELS_DIR, 'player_kills.pkl'))
 
