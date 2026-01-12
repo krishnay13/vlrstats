@@ -19,12 +19,42 @@ Valorant esports statistics platform with **Elo rating system** and **ML-based m
 pip install -r requirements.txt
 ```
 
-### 2. Ingest Matches (modular)
+### 2. Ingest Matches
+
+#### Ingest Individual Matches
 ```bash
 # Ingest by match IDs or URLs from vlr.gg
 python -m loadDB.cli ingest 123456 123789
 python -m loadDB.cli ingest https://www.vlr.gg/123456 https://www.vlr.gg/123789
 ```
+
+#### Scrape Tournament Matches
+```bash
+# Scrape all completed match IDs from a tournament
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792
+
+# Save to a custom file
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792 -o my_tournament_matches.txt
+
+# Include all matches (not just completed ones)
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792 --all
+```
+
+#### Upload Matches from File
+```bash
+# Upload matches from a file with tournament type (interactive prompt)
+python -m loadDB.cli upload-from-file tournament_matches.txt
+
+# Upload with tournament type specified
+python -m loadDB.cli upload-from-file tournament_matches.txt --tournament-type VCL
+python -m loadDB.cli upload-from-file tournament_matches.txt --tournament-type VCT
+python -m loadDB.cli upload-from-file tournament_matches.txt --tournament-type OFFSEASON
+```
+
+**Tournament Types:**
+- `VCL` - Valorant Challengers League
+- `VCT` - Valorant Champions Tour
+- `OFFSEASON` - Offseason tournaments
 
 ### 3. Build Elo Ratings
 ```bash
@@ -89,10 +119,11 @@ POST /api/elo/recalculate      # Rebuild all Elo ratings
 │   └── predict.py                 # Inference
 │
 ├── loadDB/                         # Data scraping & loading
-│   ├── cli.py                     # Unified CLI (ingest, elo, show)
+│   ├── cli.py                     # Unified CLI (ingest, elo, show, scrape-tournament, upload-from-file)
 │   ├── config.py                  # Central config (DB path, Elo constants, aliases)
 │   ├── aliases.json               # Team alias normalization map
 │   ├── vlr_ingest.py              # Ingest single matches by ID/URL
+│   ├── tournament_scraper.py     # Scrape match IDs from tournament pages
 │   ├── db_utils.py                # Upsert helpers and schema ensure
 │   ├── elo.py                     # Team/Player Elo computation
 │   ├── display.py                 # Read-only display helpers
@@ -130,6 +161,90 @@ POST /api/elo/recalculate      # Rebuild all Elo ratings
 4. Calculate Elo ratings chronologically
 5. Train ML models on feature-engineered dataset
 6. Serve predictions via REST API
+
+## Database Entry Commands Reference
+
+### Match Ingestion
+
+**Single Match Ingestion:**
+```bash
+# By match ID
+python -m loadDB.cli ingest 123456
+
+# By URL
+python -m loadDB.cli ingest https://www.vlr.gg/123456/match-name
+
+# Multiple matches
+python -m loadDB.cli ingest 123456 123789 123890
+```
+
+**Tournament Scraping:**
+```bash
+# Scrape completed matches from a tournament
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792
+
+# Custom output file
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792 -o matches.txt
+
+# Include all matches (completed and upcoming)
+python -m loadDB.cli scrape-tournament https://www.vlr.gg/event/2792 --all
+
+# Scrape ALL VCT 2024 & 2025 matches (clears DB first!)
+python -m loadDB.cli scrape-all-vct
+```
+
+**Batch Upload from File:**
+```bash
+# Interactive tournament type selection
+python -m loadDB.cli upload-from-file tournament_matches.txt
+
+# Specify match type directly
+python -m loadDB.cli upload-from-file tournament_matches.txt --match-type VCL
+python -m loadDB.cli upload-from-file tournament_matches.txt --match-type VCT
+python -m loadDB.cli upload-from-file tournament_matches.txt --match-type OFFSEASON
+python -m loadDB.cli upload-from-file tournament_matches.txt --match-type SHOWMATCH
+```
+
+### Elo Rating Commands
+
+**Compute Elo Ratings:**
+```bash
+# Compute and display top 20 teams (no persistence)
+python -m loadDB.cli elo compute --top 20
+
+# Compute and save to database
+python -m loadDB.cli elo compute --save --top 20
+```
+
+**View Rankings:**
+```bash
+# Top teams
+python -m loadDB.cli show top-teams -n 20
+
+# Top players
+python -m loadDB.cli show top-players -n 20
+
+# Team Elo history
+python -m loadDB.cli show team-history "G2 Esports"
+
+# Player Elo history
+python -m loadDB.cli show player-history "trent"
+```
+
+### Database Schema
+
+The `Matches` table includes:
+- `match_id` (PRIMARY KEY)
+- `tournament` - Tournament name
+- `stage` - Stage (e.g., "Group Stage", "Playoffs")
+- `match_type` - Match type (e.g., "Regular Season")
+- `match_name` - Full match name
+- `team_a`, `team_b` - Team names
+- `team_a_score`, `team_b_score` - Match scores
+- `match_result` - Formatted result string
+- `match_ts_utc` - UTC timestamp
+- `match_date` - Date string
+- `match_type` - VCL, VCT, OFFSEASON, or SHOWMATCH (classification of match, not tournament)
 
 ## Known Issues & Improvements
 

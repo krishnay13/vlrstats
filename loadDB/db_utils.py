@@ -16,29 +16,70 @@ def ensure_matches_columns(conn: sqlite3.Connection) -> None:
     if 'match_date' not in cols:
         cur.execute("ALTER TABLE Matches ADD COLUMN match_date TEXT")
         conn.commit()
+    # Migrate tournament_type to match_type if it exists
+    if 'tournament_type' in cols and 'match_type' in cols:
+        # Copy tournament_type values to match_type where match_type is empty or old format
+        cur.execute("""
+            UPDATE Matches 
+            SET match_type = tournament_type 
+            WHERE (match_type IS NULL OR match_type = '' OR match_type NOT IN ('VCT', 'VCL', 'OFFSEASON', 'SHOWMATCH'))
+            AND tournament_type IS NOT NULL
+        """)
+        conn.commit()
+        # Drop tournament_type column after migration
+        # Note: SQLite doesn't support DROP COLUMN directly, so we'll leave it for now
+        # but use match_type going forward
 
 
 def upsert_match(conn: sqlite3.Connection, row: tuple) -> None:
-    sql = (
-        """
-        INSERT INTO Matches (
-            match_id, tournament, stage, match_type, match_name,
-            team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(match_id) DO UPDATE SET
-            tournament=excluded.tournament,
-            stage=excluded.stage,
-            match_type=excluded.match_type,
-            match_name=excluded.match_name,
-            team_a=excluded.team_a,
-            team_b=excluded.team_b,
-            team_a_score=excluded.team_a_score,
-            team_b_score=excluded.team_b_score,
-            match_result=excluded.match_result,
-            match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
-            match_date=COALESCE(excluded.match_date, match_date)
-        """
-    )
+    # Handle both old format (12 fields) and new format (13 fields with match_type classification)
+    # match_type now stores VCT/VCL/OFFSEASON/SHOWMATCH instead of parsed match name part
+    if len(row) == 12:
+        # Old format - match_type is the 4th field (index 3) and contains parsed match name part
+        # We'll keep it as is for backward compatibility
+        sql = (
+            """
+            INSERT INTO Matches (
+                match_id, tournament, stage, match_type, match_name,
+                team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                tournament=excluded.tournament,
+                stage=excluded.stage,
+                match_type=COALESCE(excluded.match_type, match_type),
+                match_name=excluded.match_name,
+                team_a=excluded.team_a,
+                team_b=excluded.team_b,
+                team_a_score=excluded.team_a_score,
+                team_b_score=excluded.team_b_score,
+                match_result=excluded.match_result,
+                match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
+                match_date=COALESCE(excluded.match_date, match_date)
+            """
+        )
+    else:
+        # New format with match_type classification (13 fields)
+        # match_type field now contains VCT/VCL/OFFSEASON/SHOWMATCH
+        sql = (
+            """
+            INSERT INTO Matches (
+                match_id, tournament, stage, match_type, match_name,
+                team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                tournament=excluded.tournament,
+                stage=excluded.stage,
+                match_type=COALESCE(excluded.match_type, match_type),
+                match_name=excluded.match_name,
+                team_a=excluded.team_a,
+                team_b=excluded.team_b,
+                team_a_score=excluded.team_a_score,
+                team_b_score=excluded.team_b_score,
+                match_result=excluded.match_result,
+                match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
+                match_date=COALESCE(excluded.match_date, match_date)
+            """
+        )
     conn.execute(sql, row)
 
 

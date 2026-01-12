@@ -115,13 +115,13 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
     match_name_elem = soup.select_one('.match-header-event')
     match_name = match_name_elem.get_text(' ', strip=True) if match_name_elem else url.split('/')[-1]
     stage = ''
-    match_type = ''
+    match_type_parsed = ''  # Old parsed match type (kept for reference but not used in match_type field)
     tournament = ''
     parts = [p.strip() for p in match_name.split(':')]
     if parts:
         tournament = parts[0]
     if len(parts) >= 2:
-        match_type = parts[-1]
+        match_type_parsed = parts[-1]
         stage_token = parts[-2]
         m = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff)', stage_token, re.IGNORECASE)
         stage = m.group(1) if m else stage_token
@@ -198,18 +198,56 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         if (a_score + b_score) < 2 or (a_score + b_score) != (a_w + b_w):
             a_score, b_score = a_w, b_w
 
+    # match_type will be set during ingestion based on classification
+    # For now, set to empty string - it will be replaced with VCT/VCL/OFFSEASON/SHOWMATCH
     match_row = (
-        mid, tournament, stage, match_type, match_name,
+        mid, tournament, stage, '', match_name,  # match_type set to '' initially
         team_a, team_b, a_score, b_score, f"{team_a} {a_score}-{b_score} {team_b}", dt_utc, date_str
     )
     return match_row, maps_info, players_info
 
 
-async def ingest_matches(ids_or_urls: list[str | int]) -> None:
+def _detect_showmatch(match_name: str, tournament: str = '') -> bool:
+    """Detect if a match is a showmatch based on name and tournament."""
+    text = f"{tournament} {match_name}".lower()
+    showmatch_indicators = [
+        'showmatch', 'show match', 'show-match',
+        'all-star', 'all star', 'exhibition',
+        'charity match', 'fun match'
+    ]
+    return any(indicator in text for indicator in showmatch_indicators)
+
+
+async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = None) -> None:
     conn = get_conn()
     ensure_matches_columns(conn)
     for item in ids_or_urls:
         match_row, maps_info, players_info = await scrape_match(item)
+        
+        # Auto-detect match type if not provided
+        if not match_type:
+            match_name = match_row[4] if len(match_row) > 4 else ''
+            tournament = match_row[1] if len(match_row) > 1 else ''
+            if _detect_showmatch(match_name, tournament):
+                match_type = 'SHOWMATCH'
+            else:
+                # Determine based on tournament name
+                tournament_lower = tournament.lower()
+                if 'vct' in tournament_lower or 'champions tour' in tournament_lower:
+                    match_type = 'VCT'
+                elif 'vcl' in tournament_lower or 'challengers' in tournament_lower:
+                    match_type = 'VCL'
+                elif 'offseason' in tournament_lower:
+                    match_type = 'OFFSEASON'
+                else:
+                    # Default to VCT for VCT pages
+                    match_type = 'VCT'
+        
+        # Replace match_type in match_row (index 3)
+        match_row_list = list(match_row)
+        match_row_list[3] = match_type
+        match_row = tuple(match_row_list)
+        
         upsert_match(conn, match_row)
         m_lookup = upsert_maps(conn, maps_info)
         upsert_player_stats(conn, players_info, m_lookup)
@@ -217,5 +255,5 @@ async def ingest_matches(ids_or_urls: list[str | int]) -> None:
     conn.close()
 
 
-def ingest(ids_or_urls: list[str | int]) -> None:
-    asyncio.run(ingest_matches(ids_or_urls))
+def ingest(ids_or_urls: list[str | int], match_type: str | None = None) -> None:
+    asyncio.run(ingest_matches(ids_or_urls, match_type))

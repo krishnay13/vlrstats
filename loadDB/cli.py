@@ -1,7 +1,9 @@
 import argparse
+import asyncio
 from . import vlr_ingest
 from .elo import compute_elo
 from .display import top_players, top_teams, team_history, player_history
+from .tournament_scraper import scrape_tournament_match_ids, save_match_ids_to_file, load_match_ids_from_file
 
 
 def main():
@@ -26,6 +28,20 @@ def main():
     p_t_history.add_argument("team")
     p_p_history = p_show_sub.add_parser("player-history", help="Show player Elo history")
     p_p_history.add_argument("player")
+
+    p_scrape_tournament = sub.add_parser("scrape-tournament", help="Scrape match IDs from a tournament")
+    p_scrape_tournament.add_argument("url", help="Tournament event URL (e.g., https://www.vlr.gg/event/2792)")
+    p_scrape_tournament.add_argument("-o", "--output", help="Output file path (default: tournament_matches.txt)", default="tournament_matches.txt")
+    p_scrape_tournament.add_argument("--all", action="store_true", help="Include all matches, not just completed ones")
+
+    p_upload_file = sub.add_parser("upload-from-file", help="Upload matches from a file")
+    p_upload_file.add_argument("file", help="File containing match IDs (one per line)")
+    p_upload_file.add_argument("--match-type", choices=["VCL", "OFFSEASON", "VCT", "SHOWMATCH"], help="Match type (VCL, OFFSEASON, VCT, or SHOWMATCH)")
+
+    p_scrape_all_vct = sub.add_parser("scrape-all-vct", help="Clear DB and scrape all VCT 2024 & 2025 matches")
+    
+    p_test_matches = sub.add_parser("test-matches", help="Test random matches for data quality")
+    p_test_matches.add_argument("-n", "--num", type=int, default=10, help="Number of random matches to test")
 
     args = parser.parse_args()
 
@@ -58,6 +74,58 @@ def main():
             for (mid, team, opp_team, pre, post) in rows:
                 delta = post - pre
                 print(f"#{mid} {team or ''} vs {opp_team or ''}: {pre:.2f} -> {post:.2f} (Δ {delta:+.2f})")
+
+    if args.cmd == "scrape-tournament":
+        print(f"Scraping match IDs from tournament: {args.url}")
+        print(f"Completed only: {not args.all}")
+        try:
+            match_ids = asyncio.run(scrape_tournament_match_ids(args.url, completed_only=not args.all))
+            if match_ids:
+                save_match_ids_to_file(match_ids, args.output)
+                print(f"Found {len(match_ids)} match(es). Saved to {args.output}")
+                print(f"Match IDs: {', '.join(map(str, match_ids))}")
+            else:
+                print("No matches found.")
+        except Exception as e:
+            print(f"Error scraping tournament: {e}")
+            return 1
+
+    if args.cmd == "upload-from-file":
+        match_ids = load_match_ids_from_file(args.file)
+        if not match_ids:
+            print(f"No match IDs found in {args.file}")
+            return 1
+        
+        print(f"Found {len(match_ids)} match ID(s) in {args.file}")
+        
+        # Get match type from user if not provided
+        match_type = args.match_type
+        if not match_type:
+            while True:
+                user_input = input("Enter match type (VCL, OFFSEASON, VCT, or SHOWMATCH): ").strip().upper()
+                if user_input in ["VCL", "OFFSEASON", "VCT", "SHOWMATCH"]:
+                    match_type = user_input
+                    break
+                else:
+                    print("Invalid input. Please enter VCL, OFFSEASON, VCT, or SHOWMATCH.")
+        
+        print(f"Uploading {len(match_ids)} match(es) with match type: {match_type}")
+        try:
+            vlr_ingest.ingest(match_ids, match_type=match_type)
+            print(f"Successfully uploaded {len(match_ids)} match(es)")
+        except Exception as e:
+            print(f"Error uploading matches: {e}")
+            return 1
+
+    if args.cmd == "scrape-all-vct":
+        from .scrape_all_vct import main as scrape_main
+        asyncio.run(scrape_main())
+        return
+
+    if args.cmd == "test-matches":
+        from .test_matches import test_random_matches
+        test_random_matches(args.num)
+        return
 
 
 if __name__ == "__main__":
