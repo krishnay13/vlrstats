@@ -108,7 +108,31 @@ export function getYearFromTournament(tournament) {
   return yearMatch ? yearMatch[1] : 'Unknown';
 }
 
+// Helper function to extract region from match_name
+export function getRegionFromMatchName(matchName) {
+  if (!matchName) return 'UNKNOWN';
+  const name = matchName.toLowerCase();
+  
+  // Check for region keywords in match name
+  if (name.includes('americas') || name.includes('america kickoff') || name.includes('america stage')) {
+    return 'AMERICAS';
+  }
+  if (name.includes('emea') || name.includes('emea kickoff') || name.includes('emea stage')) {
+    return 'EMEA';
+  }
+  if (name.includes('china') || name.includes('chinese') || name.includes('china kickoff') || name.includes('china stage')) {
+    return 'CHINA';
+  }
+  if (name.includes('pacific') || name.includes('apac') || name.includes('pacific kickoff') || name.includes('pacific stage')) {
+    return 'APAC';
+  }
+  
+  return 'UNKNOWN';
+}
+
 // Helper function to get tournament sort priority
+// Ordered within a year as: Kickoff -> Stage 1 -> Stage 2 -> Masters -> Champions
+// Playoffs / Swiss / Group Stage are NOT treated as separate buckets.
 export function getTournamentSortPriority(tournament, stage) {
   const t = (tournament || '').toLowerCase();
   const s = (stage || '').toLowerCase();
@@ -117,28 +141,150 @@ export function getTournamentSortPriority(tournament, stage) {
   const yearMatch = tournament.match(/\b(202[0-9]|203[0-9])\b/);
   const year = yearMatch ? parseInt(yearMatch[1]) : 0;
   
-  // Tournament type priority (higher = more important)
-  let tournamentPriority = 0;
-  if (t.includes('champions')) tournamentPriority = 5;
-  else if (t.includes('masters')) tournamentPriority = 4;
-  else if (t.includes('vct')) tournamentPriority = 3;
-  else if (t.includes('champions tour')) tournamentPriority = 2;
-  
-  // Stage priority
-  let stagePriority = 0;
-  if (s.includes('playoffs')) stagePriority = 5;
-  else if (s.includes('grand final')) stagePriority = 6;
-  else if (s.includes('stage 2')) stagePriority = 3;
-  else if (s.includes('stage 1')) stagePriority = 2;
-  else if (s.includes('kickoff')) stagePriority = 1;
-  else if (s.includes('swiss')) stagePriority = 4;
-  else if (s.includes('group stage')) stagePriority = 4;
+  // Overall order:
+  // 1 = Kickoff
+  // 2 = Stage 1
+  // 3 = Stage 2
+  // 4 = Masters
+  // 5 = Champions
+  let order = 0;
+
+  const hasKickoff = t.includes('kickoff') || s.includes('kickoff');
+  const hasStage1 = t.includes('stage 1') || s.includes('stage 1');
+  const hasStage2 = t.includes('stage 2') || s.includes('stage 2');
+  const isMasters = t.includes('masters');
+  const isChampionsMainEvent = t.includes('champions') && !t.includes('champions tour');
+
+  if (hasKickoff) {
+    order = 1;
+  } else if (hasStage1) {
+    order = 2;
+  } else if (hasStage2) {
+    order = 3;
+  } else if (isMasters) {
+    order = 4;
+  } else if (isChampionsMainEvent) {
+    order = 5;
+  }
   
   return {
     year,
-    tournamentPriority,
-    stagePriority,
+    order,
     tournament: tournament || '',
     stage: stage || '',
   };
+}
+
+// Helper function to get region sort order
+export function getRegionSortOrder(region) {
+  const order = { AMERICAS: 1, EMEA: 2, APAC: 3, CHINA: 4, UNKNOWN: 5 };
+  return order[region] || 99;
+}
+
+export function inferTeamRegion(db, teamName) {
+  if (!teamName) return 'UNKNOWN';
+
+  const normalized = teamName.toLowerCase().trim();
+  
+  // Known team regions database (from region-detector)
+  const knownTeamRegions = {
+    'nrg': 'AMERICAS', 'cloud9': 'AMERICAS', 'c9': 'AMERICAS', 'furia': 'AMERICAS',
+    'loud': 'AMERICAS', 'sentinels': 'AMERICAS', '100 thieves': 'AMERICAS',
+    'leviatán': 'AMERICAS', 'leviatan': 'AMERICAS', 'kru': 'AMERICAS',
+    'kru esports': 'AMERICAS', 'krü esports': 'AMERICAS', 'mibr': 'AMERICAS',
+    'evil geniuses': 'AMERICAS', 'eg': 'AMERICAS', 'g2 esports': 'AMERICAS',
+    'g2': 'AMERICAS', 'luminosity': 'AMERICAS', 'shopify rebellion': 'AMERICAS',
+    'tsm': 'AMERICAS', 'moist moguls': 'AMERICAS', 'the guard': 'AMERICAS',
+    'fnatic': 'EMEA', 'navi': 'EMEA', 'natus vincere': 'EMEA',
+    'team liquid': 'EMEA', 'tl': 'EMEA', 'vitality': 'EMEA',
+    'karmine corp': 'EMEA', 'kc': 'EMEA', 'bbl': 'EMEA', 'fut': 'EMEA',
+    'giants': 'EMEA', 'bds': 'EMEA', 'th': 'EMEA', 'team heretics': 'EMEA',
+    'gentle mates': 'EMEA', 'koi': 'EMEA', 'movistar koi': 'EMEA',
+    'giantx': 'EMEA', 'gx': 'EMEA',
+    'zeta division': 'APAC', 'zeta': 'APAC', 't1': 'APAC',
+    'gen.g': 'APAC', 'geng': 'APAC', 'drx': 'APAC', 'talon': 'APAC',
+    'team secret': 'APAC', 'global esports': 'APAC', 'paper rex': 'APAC',
+    'prx': 'APAC', 'bleed': 'APAC', 'rex regum qeon': 'APAC', 'rrq': 'APAC',
+    'edward gaming': 'CHINA', 'edg': 'CHINA', 'funplus phoenix': 'CHINA',
+    'fpx': 'CHINA', 'bilibili gaming': 'CHINA', 'blg': 'CHINA',
+  };
+  
+  // Check known teams first
+  if (knownTeamRegions[normalized]) {
+    return knownTeamRegions[normalized];
+  }
+  
+  // Check partial matches
+  for (const [knownTeam, region] of Object.entries(knownTeamRegions)) {
+    if (normalized.includes(knownTeam) || knownTeam.includes(normalized)) {
+      return region;
+    }
+  }
+
+  try {
+    // First try to get region from match_name (more accurate)
+    const matches = db
+      .prepare(
+        `
+        SELECT DISTINCT match_name 
+        FROM Matches 
+        WHERE (team_a = ? OR team_b = ?)
+        AND match_name IS NOT NULL 
+        AND match_name != ''
+        LIMIT 100
+      `
+      )
+      .all(teamName, teamName);
+
+    const regionCounts = { APAC: 0, CHINA: 0, EMEA: 0, AMERICAS: 0 };
+    matches.forEach((m) => {
+      const region = getRegionFromMatchName(m.match_name);
+      if (region !== 'UNKNOWN') {
+        regionCounts[region] = (regionCounts[region] || 0) + 1;
+      }
+    });
+
+    const maxCount = Math.max(...Object.values(regionCounts));
+    if (maxCount > 0) {
+      for (const [region, count] of Object.entries(regionCounts)) {
+        if (count === maxCount) {
+          return region;
+        }
+      }
+    }
+
+    // Fallback to tournament name
+    const tournaments = db
+      .prepare(
+        `
+        SELECT DISTINCT tournament 
+        FROM Matches 
+        WHERE (team_a = ? OR team_b = ?)
+        AND tournament IS NOT NULL 
+        AND tournament != ''
+        LIMIT 50
+      `
+      )
+      .all(teamName, teamName);
+
+    tournaments.forEach((t) => {
+      const region = getRegionFromTournament(t.tournament);
+      if (region !== 'UNKNOWN') {
+        regionCounts[region] = (regionCounts[region] || 0) + 1;
+      }
+    });
+
+    const maxCount2 = Math.max(...Object.values(regionCounts));
+    if (maxCount2 > 0) {
+      for (const [region, count] of Object.entries(regionCounts)) {
+        if (count === maxCount2) {
+          return region;
+        }
+      }
+    }
+  } catch (e) {
+    // fallback below
+  }
+
+  return getRegionFromTeam(teamName);
 }

@@ -61,7 +61,8 @@ export default function MatchDetailsPage() {
         setData(matchData)
         // Set initial selected map
         if (matchData.maps && matchData.maps.length > 0) {
-          setSelectedMapId(matchData.maps[0].map_id)
+          const firstMap = matchData.maps[0]
+          setSelectedMapId(firstMap.map_id || firstMap.id)
         }
       } catch (err) {
         setError(err.message)
@@ -109,7 +110,7 @@ export default function MatchDetailsPage() {
 
   const { match, maps, playerStats } = data
   const winner = match.team1_score > match.team2_score ? 1 : match.team2_score > match.team1_score ? 2 : null
-  const selectedMap = maps.find(m => m.map_id === selectedMapId) || (maps.length > 0 ? maps[0] : null)
+  const selectedMap = maps.find(m => (m.map_id || m.id) === selectedMapId) || (maps.length > 0 ? maps[0] : null)
 
   return (
     <div className="container py-4 max-w-7xl">
@@ -207,31 +208,39 @@ export default function MatchDetailsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {maps.map((map) => {
-                      const cleanName = cleanMapName(map.map_name)
+                      const cleanName = cleanMapName(map.map_name || map.map)
+                      const mapId = map.map_id || map.id
+                      if (!mapId) {
+                        console.warn('Map missing id:', map)
+                        return null
+                      }
                       return (
-                        <SelectItem key={map.map_id} value={map.map_id.toString()}>
-                          {cleanName} ({map.team1_score || 0}-{map.team2_score || 0})
+                        <SelectItem key={mapId} value={mapId.toString()}>
+                          {cleanName} ({map.team1_score || map.team_a_score || 0}-{map.team2_score || map.team_b_score || 0})
                         </SelectItem>
                       )
-                    })}
+                    }).filter(Boolean)}
                   </SelectContent>
                 </Select>
               </div>
               
               {selectedMap && (() => {
             const map = selectedMap
-            const mapIndex = maps.findIndex(m => m.map_id === map.map_id)
-            const mapWinner = map.team1_score > map.team2_score ? 1 : map.team2_score > map.team1_score ? 2 : null
+            const mapId = map.map_id || map.id
+            const mapIndex = maps.findIndex(m => (m.map_id || m.id) === mapId)
+            const team1Score = map.team1_score || map.team_a_score || 0
+            const team2Score = map.team2_score || map.team_b_score || 0
+            const mapWinner = team1Score > team2Score ? 1 : team2Score > team1Score ? 2 : null
             const { team1Stats, team2Stats, unknownStats } = groupStatsByTeam(
-              map.playerStats,
+              map.playerStats || [],
               map.team1_name || match.team1_name,
               map.team2_name || match.team2_name
             )
-            const cleanName = cleanMapName(map.map_name)
+            const cleanName = cleanMapName(map.map_name || map.map)
             
             return (
               <motion.div
-                key={map.map_id}
+                key={mapId}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: mapIndex * 0.05 }}
@@ -242,7 +251,7 @@ export default function MatchDetailsPage() {
                       <div>
                         <CardTitle className="text-lg">{cleanName}</CardTitle>
                         <CardDescription className="text-xs">
-                          {map.team1_name || match.team1_name} {map.team1_score} - {map.team2_score} {map.team2_name || match.team2_name}
+                          {map.team1_name || match.team1_name} {team1Score} - {team2Score} {map.team2_name || match.team2_name}
                         </CardDescription>
                       </div>
                       {mapWinner && (

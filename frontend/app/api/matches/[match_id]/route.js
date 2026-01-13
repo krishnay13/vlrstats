@@ -15,42 +15,53 @@ export async function GET(request, { params }) {
     }
 
     // Fetch maps associated with the match
-    const maps = db.prepare('SELECT * FROM Maps WHERE match_id = ?').all(match_id);
+    const maps = db.prepare('SELECT * FROM Maps WHERE match_id = ? ORDER BY game_id').all(match_id);
 
     // For each map, fetch player stats
     const mapsWithStats = maps.map((map) => {
-      const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE map_id = ?').all(map.map_id);
+      // Maps table uses 'id' as primary key, not 'map_id'
+      const mapId = map.id;
+      const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE map_id = ?').all(mapId);
 
-      // Replace player IDs with player names and team names
+      // Player_Stats table uses 'player' (string) directly, not player_id
+      // Just ensure we have the right field names
       const playerStatsWithNames = playerStats.map((stat) => {
-        const player = db.prepare('SELECT player_name, team_name FROM Players WHERE player_id = ?').get(stat.player_id);
-        // Use team from stat if available, otherwise from player
-        const teamName = stat.team || (player ? player.team_name : null);
         return { 
-          ...stat, 
-          player_name: player ? player.player_name : (stat.player || 'Unknown'),
-          team_name: teamName
+          ...stat,
+          player_name: stat.player || 'Unknown',
+          team_name: stat.team || null
         };
       });
 
       // Clean map name - remove leading numbers
-      const cleanMapName = map.map_name ? map.map_name.replace(/^\d+/, '') : map.map_name;
+      const cleanMapName = map.map ? map.map.replace(/^\d+/, '') : map.map;
+      
+      // Get team names from match for display
+      const team1Name = match.team_a || match.team1_name;
+      const team2Name = match.team_b || match.team2_name;
 
-      return { ...map, map_name: cleanMapName, playerStats: playerStatsWithNames };
+      return { 
+        ...map, 
+        map_id: mapId, // Add map_id alias for frontend compatibility
+        map_name: cleanMapName, // Add map_name alias
+        team1_name: team1Name,
+        team2_name: team2Name,
+        team1_score: map.team_a_score || 0,
+        team2_score: map.team_b_score || 0,
+        playerStats: playerStatsWithNames 
+      };
     });
 
     // Fetch player stats for match totals (where map_id is NULL)
     const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE match_id = ? AND map_id IS NULL').all(match_id);
 
     // Replace player IDs with player names and team names in match totals
+    // Player_Stats table uses 'player' (string) directly, not player_id
     const playerStatsWithNames = playerStats.map((stat) => {
-      const player = db.prepare('SELECT player_name, team_name FROM Players WHERE player_id = ?').get(stat.player_id);
-      // Use team from stat if available, otherwise from player
-      const teamName = stat.team || (player ? player.team_name : null);
       return { 
-        ...stat, 
-        player_name: player ? player.player_name : (stat.player || 'Unknown'),
-        team_name: teamName
+        ...stat,
+        player_name: stat.player || 'Unknown',
+        team_name: stat.team || null
       };
     });
 

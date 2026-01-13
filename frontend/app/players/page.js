@@ -67,13 +67,12 @@ export default function PlayersPage() {
             <TableRow className="h-10">
               <TableHead className="h-10 px-4 text-xs font-semibold">Player</TableHead>
               <TableHead className="h-10 px-4 text-xs font-semibold">Team</TableHead>
-              <TableHead className="h-10 px-4 text-xs font-semibold w-20">ID</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {players.map((player, index) => (
               <motion.tr
-                key={player.player_id}
+                key={player.player_name}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.01 }}
@@ -101,9 +100,6 @@ export default function PlayersPage() {
                     <Users className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">{player.team_name || 'Free Agent'}</span>
                   </div>
-                </TableCell>
-                <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">
-                  {player.player_id}
                 </TableCell>
               </motion.tr>
             ))}

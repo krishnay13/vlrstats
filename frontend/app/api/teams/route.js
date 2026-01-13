@@ -2,87 +2,61 @@
 
 import { NextResponse } from 'next/server';
 import db from '@/app/lib/db.js';
-import { getRegionFromTournament, getRegionFromTeam, isOlderThanSixMonths } from '@/app/lib/region-utils.js';
+import { inferTeamRegion, isOlderThanSixMonths } from '@/app/lib/region-utils.js';
+import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 
-// Helper function to check if team is a showmatch team
-function isShowmatchTeam(teamName) {
-  if (!teamName) return false;
-  const name = teamName.toLowerCase();
-  return name.includes('team international') || 
-         name.includes('team spain') || 
-         name.includes('team china') ||
-         (name.includes('team ') && (name.includes('showmatch') || name.includes('all-star')));
-}
-
-// Get team's region based on tournaments they've played in
-function getTeamRegion(db, teamName) {
+// Get team's last match date (checking all aliases)
+function getTeamLastMatchDate(db, normalizedTeamName) {
   try {
-    // Get tournaments this team has played in
-    const tournaments = db.prepare(`
-      SELECT DISTINCT tournament 
-      FROM Matches 
-      WHERE (team_a = ? OR team_b = ?) 
-      AND tournament IS NOT NULL 
-      AND tournament != ''
-      LIMIT 50
-    `).all(teamName, teamName);
-    
-    // Count regions from tournaments
-    const regionCounts = { APAC: 0, CHINA: 0, EMEA: 0, AMERICAS: 0 };
-    tournaments.forEach(t => {
-      const region = getRegionFromTournament(t.tournament);
-      if (region !== 'UNKNOWN') {
-        regionCounts[region] = (regionCounts[region] || 0) + 1;
-      }
-    });
-    
-    // Return the most common region
-    const maxCount = Math.max(...Object.values(regionCounts));
-    if (maxCount > 0) {
-      for (const [region, count] of Object.entries(regionCounts)) {
-        if (count === maxCount) {
-          return region;
-        }
+    // Get all possible aliases for this team
+    const allVariants = [normalizedTeamName];
+    for (const [variant, canonical] of Object.entries({
+      'via kru esports': 'KRÜ Esports',
+      'via kru': 'KRÜ Esports',
+      'kru esports': 'KRÜ Esports',
+      'kru': 'KRÜ Esports',
+      'visa kru esports': 'KRÜ Esports',
+      'visa kru': 'KRÜ Esports',
+      'movistar koi': 'KOI',
+      'movistar koi(koi)': 'KOI',
+      'koi': 'KOI',
+    })) {
+      if (canonical === normalizedTeamName) {
+        allVariants.push(variant);
       }
     }
     
-    // Fallback to team name detection
-    return getRegionFromTeam(teamName);
-  } catch (e) {
-    return getRegionFromTeam(teamName);
-  }
-}
-
-// Get team's last match date
-function getTeamLastMatchDate(db, teamName) {
-  try {
     const tableInfo = db.prepare("PRAGMA table_info(Matches)").all();
     const columns = tableInfo.map(col => col.name);
     const hasMatchDate = columns.includes('match_date');
     const hasMatchTsUtc = columns.includes('match_ts_utc');
+    
+    // Build query with all variants
+    const placeholders = allVariants.map(() => '?').join(',');
+    const params = [...allVariants, ...allVariants];
     
     let result;
     if (hasMatchDate && hasMatchTsUtc) {
       result = db.prepare(`
         SELECT MAX(COALESCE(match_date, substr(match_ts_utc, 1, 10))) as last_match_date
         FROM Matches
-        WHERE (team_a = ? OR team_b = ? OR team1_name = ? OR team2_name = ?)
+        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
         AND ((match_date IS NOT NULL AND match_date != '') OR (match_ts_utc IS NOT NULL AND match_ts_utc != ''))
-      `).get(teamName, teamName, teamName, teamName);
+      `).get(...params);
     } else if (hasMatchTsUtc) {
       result = db.prepare(`
         SELECT MAX(match_ts_utc) as last_match_date
         FROM Matches
-        WHERE (team_a = ? OR team_b = ? OR team1_name = ? OR team2_name = ?)
+        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
         AND match_ts_utc IS NOT NULL AND match_ts_utc != ''
-      `).get(teamName, teamName, teamName, teamName);
+      `).get(...params);
     } else if (hasMatchDate) {
       result = db.prepare(`
         SELECT MAX(match_date) as last_match_date
         FROM Matches
-        WHERE (team_a = ? OR team_b = ? OR team1_name = ? OR team2_name = ?)
+        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
         AND match_date IS NOT NULL AND match_date != ''
-      `).get(teamName, teamName, teamName, teamName);
+      `).get(...params);
     } else {
       return null;
     }
@@ -95,29 +69,62 @@ function getTeamLastMatchDate(db, teamName) {
 
 export async function GET() {
   try {
-    // Fetch all teams from the Teams table
-    const allTeams = db.prepare('SELECT * FROM Teams').all();
+    // Derive teams from Matches table (distinct team names)
+    const teamNames = db.prepare(`
+      SELECT DISTINCT team as team_name
+      FROM (
+        SELECT team_a as team FROM Matches WHERE team_a IS NOT NULL AND team_a != ''
+        UNION
+        SELECT team_b as team FROM Matches WHERE team_b IS NOT NULL AND team_b != ''
+      )
+      ORDER BY team_name
+    `).all();
     
-    // Filter out showmatch teams and add region/inactive info
-    const teams = allTeams
-      .filter(team => !isShowmatchTeam(team.team_name))
-      .map(team => {
-        const region = getTeamRegion(db, team.team_name);
-        const lastMatchDate = getTeamLastMatchDate(db, team.team_name);
-        const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
-        
-        return {
-          ...team,
-          region,
-          is_inactive: isInactive,
-        };
-      });
+    // Normalize team names and merge aliases
+    const normalizedTeamsMap = new Map();
     
-    // Sort by region, then by team name
+    teamNames.forEach(team => {
+      const normalized = normalizeTeamName(team.team_name);
+      
+      // Skip showmatch teams
+      if (isShowmatchTeam(normalized)) {
+        return;
+      }
+      
+      // If we've seen this normalized name before, skip (merge aliases)
+      if (normalizedTeamsMap.has(normalized)) {
+        return;
+      }
+      
+      normalizedTeamsMap.set(normalized, team.team_name);
+    });
+    
+    // Convert to array and add region/inactive info
+    const teams = Array.from(normalizedTeamsMap.keys()).map(teamName => {
+      const region = inferTeamRegion(db, teamName);
+      const lastMatchDate = getTeamLastMatchDate(db, teamName);
+      const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
+      
+      return {
+        team_name: teamName,
+        region,
+        is_inactive: isInactive,
+      };
+    });
+    
+    // Sort: by region, then active teams first, then alphabetically
     const regionOrder = { AMERICAS: 1, EMEA: 2, APAC: 3, CHINA: 4, UNKNOWN: 5 };
     teams.sort((a, b) => {
+      // First by region
       const regionDiff = (regionOrder[a.region] || 99) - (regionOrder[b.region] || 99);
       if (regionDiff !== 0) return regionDiff;
+      
+      // Then active teams first
+      if (a.is_inactive !== b.is_inactive) {
+        return a.is_inactive ? 1 : -1;
+      }
+      
+      // Finally alphabetically
       return (a.team_name || '').localeCompare(b.team_name || '');
     });
     

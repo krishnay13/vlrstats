@@ -102,14 +102,13 @@ export default function TeamsPage() {
                   <TableHeader>
                     <TableRow className="h-10">
                       <TableHead className="h-10 px-4 text-xs font-semibold">Team</TableHead>
-                      <TableHead className="h-10 px-4 text-xs font-semibold w-20">ID</TableHead>
                       <TableHead className="h-10 px-4 text-xs font-semibold w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {regionTeams.map((team, index) => (
                       <motion.tr
-                        key={team.team_id}
+                        key={team.team_name}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.01 }}
@@ -132,12 +131,9 @@ export default function TeamsPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">
-                          {team.team_id}
-                        </TableCell>
                         <TableCell className="px-4 py-3">
                           <Link
-                            href={`/teams/${team.team_id}`}
+                            href={`/teams/${encodeURIComponent(team.team_name)}`}
                             className="text-xs text-primary hover:underline font-medium flex items-center space-x-1"
                           >
                             <span>View Roster</span>
