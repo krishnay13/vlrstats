@@ -21,7 +21,8 @@ def main():
     p_show = sub.add_parser("show", help="Display current snapshots or histories")
     p_show_sub = p_show.add_subparsers(dest="show_cmd", required=True)
     p_topteams = p_show_sub.add_parser("top-teams", help="Show top teams")
-    p_topteams.add_argument("-n", type=int, default=20)
+    p_topteams.add_argument("-n", type=int, default=20, help="Number of teams to show")
+    p_topteams.add_argument("--date-range", type=str, help="Date range: 2024, 2025, last-3-months, last-6-months, or all-time (default)")
     p_topplayers = p_show_sub.add_parser("top-players", help="Show top players")
     p_topplayers.add_argument("-n", type=int, default=20)
     p_t_history = p_show_sub.add_parser("team-history", help="Show team Elo history")
@@ -43,6 +44,13 @@ def main():
     p_test_matches = sub.add_parser("test-matches", help="Test random matches for data quality")
     p_test_matches.add_argument("-n", "--num", type=int, default=10, help="Number of random matches to test")
 
+    p_standardize = sub.add_parser("standardize-teams", help="Use LLM or heuristics to standardize team names and identify duplicates")
+    p_standardize.add_argument("--provider", choices=["openai", "anthropic", "heuristics"], default="openai", help="Provider: LLM (openai/anthropic) or heuristics (default: openai)")
+    p_standardize.add_argument("--api-key", type=str, help="API key (or set OPENAI_API_KEY/ANTHROPIC_API_KEY env var)")
+    p_standardize.add_argument("--preview", action="store_true", help="Preview mappings without saving")
+    p_standardize.add_argument("--no-save", action="store_true", help="Don't save to aliases.json")
+    p_standardize.add_argument("--fallback", action="store_true", help="Fall back to heuristics if LLM fails")
+
     args = parser.parse_args()
 
     if args.cmd == "ingest":
@@ -57,7 +65,11 @@ def main():
 
     if args.cmd == "show":
         if args.show_cmd == "top-teams":
-            for i, (team, rating, matches) in enumerate(top_teams(args.n), 1):
+            date_range = getattr(args, 'date_range', None)
+            teams = top_teams(args.n, date_range=date_range)
+            date_display = f" ({date_range})" if date_range and date_range != "all-time" else ""
+            print(f"Top {len(teams)} Teams by Elo{date_display}:")
+            for i, (team, rating, matches) in enumerate(teams, 1):
                 print(f"{i:2d}. {team:30s} {rating:7.2f} ({matches} matches)")
         elif args.show_cmd == "top-players":
             for i, (player, team, rating, matches) in enumerate(top_players(args.n), 1):
@@ -125,6 +137,46 @@ def main():
     if args.cmd == "test-matches":
         from .test_matches import test_random_matches
         test_random_matches(args.num)
+        return
+
+    if args.cmd == "standardize-teams":
+        from .team_standardizer import standardize_teams, get_all_team_names, standardize_with_heuristics
+        try:
+            if args.preview:
+                team_names = get_all_team_names()
+                print(f"Found {len(team_names)} unique team names\n")
+                if args.provider == "heuristics":
+                    new_mappings = standardize_with_heuristics(team_names)
+                elif args.provider == "openai":
+                    from .team_standardizer import standardize_with_llm
+                    new_mappings = standardize_with_llm(team_names, args.api_key)
+                else:
+                    from .team_standardizer import standardize_with_anthropic
+                    new_mappings = standardize_with_anthropic(team_names, args.api_key)
+                print("\n" + "=" * 70)
+                print("PREVIEW - New mappings (not saved):")
+                print("=" * 70)
+                for variant, canonical in sorted(new_mappings.items()):
+                    print(f"  {variant:50s} -> {canonical}")
+            else:
+                standardize_teams(
+                    provider=args.provider,
+                    api_key=args.api_key,
+                    save=not args.no_save,
+                    use_heuristics=args.fallback
+                )
+        except ImportError as e:
+            print(f"Error: {e}")
+            print("\nPlease install required package:")
+            if "openai" in str(e):
+                print("  pip install openai")
+            elif "anthropic" in str(e):
+                print("  pip install anthropic")
+        except Exception as e:
+            print(f"Error standardizing teams: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
         return
 
 

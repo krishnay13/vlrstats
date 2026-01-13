@@ -44,9 +44,9 @@ def clear_database(db_path: str = None):
     for table in tables_to_clear:
         try:
             cur.execute(f'DELETE FROM {table}')
-            print(f"  ✓ Cleared {table}")
+            print(f"  [OK] Cleared {table}")
         except sqlite3.OperationalError as e:
-            print(f"  ⚠ {table}: {e}")
+            print(f"  [WARNING] {table}: {e}")
     
     con.commit()
     

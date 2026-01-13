@@ -303,25 +303,50 @@ def get_team_avg_rating(cur: sqlite3.Cursor, match_id: int, team: str) -> float 
     return float(sum(vals) / len(vals))
 
 
-def compute_elo(save: bool = False, top: int = 20):
+def compute_elo(save: bool = False, top: int = 20, start_date: str | None = None, end_date: str | None = None):
+    """
+    Compute Elo ratings from matches in the database.
+    
+    Args:
+        save: If True, save Elo history and current ratings to database
+        top: Number of top teams to display
+        start_date: Optional start date filter (YYYY-MM-DD format)
+        end_date: Optional end date filter (YYYY-MM-DD format)
+    """
     if not os.path.exists(DB_PATH):
         raise SystemExit(f"DB not found at {DB_PATH}")
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # Load matches; without timestamps we approximate order by match_id
-    cur.execute(
-        """
+    # Build query with optional date filtering
+    query = """
         SELECT match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score
         FROM Matches
         WHERE team_a IS NOT NULL AND team_b IS NOT NULL
+    """
+    params = []
+    
+    if start_date or end_date:
+        date_conditions = []
+        if start_date:
+            date_conditions.append("(match_date >= ? OR (match_date IS NULL AND match_ts_utc >= ?))")
+            params.extend([start_date, start_date])
+        if end_date:
+            date_conditions.append("(match_date <= ? OR (match_date IS NULL AND match_ts_utc <= ?))")
+            params.extend([end_date, end_date + "T23:59:59Z"])
+        
+        if date_conditions:
+            query += " AND " + " AND ".join(date_conditions)
+    
+    query += """
         ORDER BY
           CASE WHEN match_date IS NOT NULL AND match_date <> '' THEN 0 ELSE 1 END,
           match_date ASC,
           match_id ASC
-        """
-    )
+    """
+    
+    cur.execute(query, params)
     matches = cur.fetchall()
 
     ratings = defaultdict(lambda: START_ELO)
@@ -570,6 +595,116 @@ def compute_elo(save: bool = False, top: int = 20):
         print(f"{i:2d}. {team:30s} {rating:7.2f} ({games_played[team]} matches)")
 
     conn.close()
+
+
+def _compute_elo_ratings(start_date: str | None = None, end_date: str | None = None):
+    """
+    Compute Elo ratings for a date range without saving to database.
+    
+    Args:
+        start_date: Optional start date filter (YYYY-MM-DD format)
+        end_date: Optional end date filter (YYYY-MM-DD format)
+    
+    Returns:
+        Tuple of (ratings dict, games_played dict)
+    """
+    if not os.path.exists(DB_PATH):
+        raise SystemExit(f"DB not found at {DB_PATH}")
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    query = """
+        SELECT match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score
+        FROM Matches
+        WHERE team_a IS NOT NULL AND team_b IS NOT NULL
+    """
+    params = []
+    
+    if start_date or end_date:
+        date_conditions = []
+        if start_date:
+            date_conditions.append("(match_date >= ? OR (match_date IS NULL AND match_ts_utc >= ?))")
+            params.extend([start_date, start_date])
+        if end_date:
+            date_conditions.append("(match_date <= ? OR (match_date IS NULL AND match_ts_utc <= ?))")
+            params.extend([end_date, end_date + "T23:59:59Z"])
+        
+        if date_conditions:
+            query += " AND " + " AND ".join(date_conditions)
+    
+    query += """
+        ORDER BY
+          CASE WHEN match_date IS NOT NULL AND match_date <> '' THEN 0 ELSE 1 END,
+          match_date ASC,
+          match_id ASC
+    """
+    
+    cur.execute(query, params)
+    matches = cur.fetchall()
+
+    ratings = defaultdict(lambda: START_ELO)
+    games_played = defaultdict(int)
+
+    for match_id, tournament, stage, match_type, match_name, ta, tb, ta_score, tb_score in matches:
+        try:
+            a = normalize_team(ta)
+            b = normalize_team(tb)
+            if not a or not b:
+                continue
+
+            ra = ratings[a]
+            rb = ratings[b]
+
+            roster_a = get_team_roster(cur, match_id, a)
+            roster_b = get_team_roster(cur, match_id, b)
+            avg_pa = mean([START_ELO for p in roster_a]) if roster_a else START_ELO
+            avg_pb = mean([START_ELO for p in roster_b]) if roster_b else START_ELO
+            ra_eff = ra + PLAYER_INFLUENCE_BETA * (avg_pa - START_ELO)
+            rb_eff = rb + PLAYER_INFLUENCE_BETA * (avg_pb - START_ELO)
+
+            exp_a = expected_score(ra_eff, rb_eff)
+            exp_b = 1.0 - exp_a
+
+            team_update = True
+            if ta_score is None or tb_score is None or (ta_score == tb_score == 0):
+                sa, sb = 0.5, 0.5
+                margin = 0
+                team_update = False
+            else:
+                if ta_score > tb_score:
+                    sa, sb = 1.0, 0.0
+                    margin = ta_score - tb_score
+                elif tb_score > ta_score:
+                    sa, sb = 0.0, 1.0
+                    margin = tb_score - ta_score
+                else:
+                    sa, sb = 0.5, 0.5
+                    margin = 0
+
+            rdiff = ra_eff - rb_eff
+            k = K_BASE
+            imp = get_importance(tournament or '', stage or '', match_type or '')
+            round_margin = get_round_margin(cur, match_id)
+            use_margin = round_margin if round_margin is not None else float(margin)
+            mult = mov_multiplier(use_margin, rdiff)
+            k_eff = k * imp * mult
+
+            new_ra = ra
+            new_rb = rb
+            if team_update:
+                new_ra = ra + k_eff * (sa - exp_a)
+                new_rb = rb + k_eff * (sb - exp_b)
+
+            ratings[a] = new_ra
+            ratings[b] = new_rb
+            games_played[a] += 1
+            games_played[b] += 1
+        except Exception as e:
+            continue
+
+    conn.close()
+    return dict(ratings), dict(games_played)
 
 
 if __name__ == "__main__":

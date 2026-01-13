@@ -1,7 +1,7 @@
 // frontend/app/api/teams/[team_id]/route.js
 
 import { NextResponse } from 'next/server';
-import db from '../../../lib/db.js';
+import db from '@/app/lib/db.js';
 
 export async function GET(request, { params }) {
   try {

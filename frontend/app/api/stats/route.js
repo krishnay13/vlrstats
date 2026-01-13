@@ -1,7 +1,7 @@
 // frontend/app/api/stats/route.js
 
 import { NextResponse } from 'next/server';
-import db from '../../lib/db.js';
+import db from '@/app/lib/db.js';
 
 export async function GET() {
   try {

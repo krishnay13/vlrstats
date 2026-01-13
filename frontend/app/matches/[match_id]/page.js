@@ -10,6 +10,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,6 +44,7 @@ export default function MatchDetailsPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selectedMapId, setSelectedMapId] = useState(null)
 
   useEffect(() => {
     async function fetchMatchDetails() {
@@ -51,6 +59,10 @@ export default function MatchDetailsPage() {
         }
         const matchData = await res.json()
         setData(matchData)
+        // Set initial selected map
+        if (matchData.maps && matchData.maps.length > 0) {
+          setSelectedMapId(matchData.maps[0].map_id)
+        }
       } catch (err) {
         setError(err.message)
       } finally {
@@ -97,6 +109,7 @@ export default function MatchDetailsPage() {
 
   const { match, maps, playerStats } = data
   const winner = match.team1_score > match.team2_score ? 1 : match.team2_score > match.team1_score ? 2 : null
+  const selectedMap = maps.find(m => m.map_id === selectedMapId) || (maps.length > 0 ? maps[0] : null)
 
   return (
     <div className="container py-4 max-w-7xl">
@@ -181,7 +194,33 @@ export default function MatchDetailsPage() {
         </TabsList>
 
         <TabsContent value="maps" className="space-y-3">
-          {maps.map((map, mapIndex) => {
+          {maps.length > 0 && (
+            <>
+              <div className="flex items-center space-x-3 mb-3">
+                <label className="text-sm font-medium">Select Map:</label>
+                <Select 
+                  value={selectedMapId?.toString() || ''} 
+                  onValueChange={(value) => setSelectedMapId(parseInt(value))}
+                >
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Select a map" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {maps.map((map) => {
+                      const cleanName = cleanMapName(map.map_name)
+                      return (
+                        <SelectItem key={map.map_id} value={map.map_id.toString()}>
+                          {cleanName} ({map.team1_score || 0}-{map.team2_score || 0})
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedMap && (() => {
+            const map = selectedMap
+            const mapIndex = maps.findIndex(m => m.map_id === map.map_id)
             const mapWinner = map.team1_score > map.team2_score ? 1 : map.team2_score > map.team1_score ? 2 : null
             const { team1Stats, team2Stats, unknownStats } = groupStatsByTeam(
               map.playerStats,
@@ -346,7 +385,17 @@ export default function MatchDetailsPage() {
                 </Card>
               </motion.div>
             )
-          })}
+          })()}
+            </>
+          )}
+          
+          {maps.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No maps available for this match.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="totals">

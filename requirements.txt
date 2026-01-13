@@ -7,3 +7,5 @@ pandas>=2.1
 scikit-learn>=1.3
 joblib>=1.3
 aiohttp>=3.9
+openai>=1.0.0
+anthropic>=0.18.0

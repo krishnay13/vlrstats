@@ -107,13 +107,16 @@ async def get_tournament_matches_url(event_url: str) -> str:
 
 async def scrape_tournament_match_ids(event_url: str, completed_only: bool = True) -> List[int]:
     """
-    Scrape all match IDs from a tournament matches page.
+    Scrape all match IDs from a tournament matches page with multiple fallback strategies.
     
-    Uses pattern matching similar to utilities/WebScraper/fetch.py to identify match links.
-    When completed_only is True, validates matches by checking for score patterns in the DOM.
-    Valid match scores are typically 0-3, and the function checks up to 10 levels up the DOM
-    tree to find score indicators. Excludes time patterns (e.g., "11:00 am") and upcoming
-    matches (indicated by em dashes).
+    Uses multiple strategies to find matches:
+    1. Direct match links (pattern: /number/match-name)
+    2. Match item containers
+    3. Stats links
+    4. All numeric links that could be matches
+    
+    When completed_only is True, validates matches by checking for score patterns.
+    More lenient detection to catch all completed matches.
     
     Args:
         event_url: Tournament event URL (e.g., https://www.vlr.gg/event/2792)
@@ -129,64 +132,157 @@ async def scrape_tournament_match_ids(event_url: str, completed_only: bool = Tru
     
     soup = BeautifulSoup(html, 'html.parser')
     match_ids: List[int] = []
+    seen_ids = set()
     
+    # Strategy 1: Find all links with numeric IDs (most common pattern)
     all_links = soup.find_all('a', href=re.compile(r'/\d+/'))
     
     for link in all_links:
         href = link.get('href', '')
+        if not href:
+            continue
+            
+        # Extract match ID - pattern: /123456/match-name or /123456/
         parts = href.split('/')
-        if len(parts) < 3 or not parts[1].isdigit():
-            continue
-            
-        match_id = int(parts[1])
-        
-        if match_id in match_ids:
+        if len(parts) < 2:
             continue
         
+        # Check if second part is a digit (match ID)
+        potential_id = parts[1] if len(parts) > 1 else None
+        if not potential_id or not potential_id.isdigit():
+            continue
+        
+        match_id = int(potential_id)
+        
+        # Skip if already seen
+        if match_id in seen_ids:
+            continue
+        
+        # Skip obviously wrong IDs (too small or too large)
+        if match_id < 1000 or match_id > 9999999:
+            continue
+        
+        # Check if this looks like a match link (has match name or is in match context)
+        link_text = link.get_text(strip=True).lower()
+        href_lower = href.lower()
+        
+        # Skip if it's clearly not a match (common non-match patterns)
+        skip_patterns = ['/event/', '/team/', '/player/', '/stats/', '/rankings/', '/matches/']
+        if any(pattern in href_lower for pattern in skip_patterns):
+            continue
+        
+        # If completed_only, check if match is completed
         if completed_only:
-            parent = link.parent
-            found_completed = False
+            is_completed = False
             
-            for _ in range(10):
+            # Strategy A: Check for score in nearby text
+            parent = link.parent
+            for _ in range(15):  # Check up DOM tree
                 if parent is None:
                     break
                 
                 container_text = parent.get_text(' ', strip=True)
                 
+                # Look for score pattern (e.g., "2 : 0", "1-1", "2-0")
                 score_match = re.search(r'\b(\d{1,2})\s*[:\-]\s*(\d{1,2})\b', container_text)
                 if score_match:
                     score1, score2 = int(score_match.group(1)), int(score_match.group(2))
-                    if 0 <= score1 <= 3 and 0 <= score2 <= 3:
-                        if not re.search(r'\d{1,2}:\d{2}\s*(AM|PM|am|pm)', container_text):
-                            if not re.search(r'[–—]\s*[–—]', container_text):
-                                found_completed = True
-                                match_ids.append(match_id)
+                    # Valid match scores (0-3 for best-of-3, 0-5 for best-of-5)
+                    if 0 <= score1 <= 5 and 0 <= score2 <= 5:
+                        # Exclude time patterns
+                        if not re.search(r'\d{1,2}:\d{2}\s*(AM|PM|am|pm|UTC|GMT)', container_text, re.I):
+                            # Exclude upcoming matches (em dash)
+                            if not re.search(r'[–—]\s*[–—]|TBD|Pending|Upcoming', container_text, re.I):
+                                is_completed = True
                                 break
                 
-                if re.search(r'\b(Completed|Finished|Done|Result)\b', container_text, re.I):
-                    found_completed = True
-                    match_ids.append(match_id)
-                    break
+                # Strategy B: Check for completion indicators
+                if re.search(r'\b(Completed|Finished|Done|Result|Final)\b', container_text, re.I):
+                    # Make sure it's not "Upcoming" or "Pending"
+                    if not re.search(r'(Upcoming|Pending|TBD|Schedule)', container_text, re.I):
+                        is_completed = True
+                        break
                 
-                if link.get_text(strip=True) in ['Stats:', 'Stats']:
-                    if re.search(r'\d+\s*:\s*\d+', container_text):
+                # Strategy C: Check if link text indicates completion
+                if link_text in ['stats', 'stats:', 'view', 'result']:
+                    # Check for score nearby
+                    if re.search(r'\d+\s*[:\-]\s*\d+', container_text):
                         if not re.search(r'[–—]\s*[–—]', container_text):
-                            found_completed = True
-                            match_ids.append(match_id)
+                            is_completed = True
                             break
                 
                 parent = getattr(parent, 'parent', None)
+            
+            # Strategy D: If link is in a match item container, check the whole container
+            if not is_completed:
+                # Look for match item containers
+                match_item = link
+                for _ in range(5):
+                    if match_item is None:
+                        break
+                    classes = match_item.get('class', []) if hasattr(match_item, 'get') else []
+                    class_str = ' '.join(classes).lower() if classes else ''
+                    if 'match' in class_str or 'item' in class_str:
+                        item_text = match_item.get_text(' ', strip=True)
+                        # If container has team names and scores, it's likely completed
+                        if re.search(r'\d+\s*[:\-]\s*\d+', item_text):
+                            if not re.search(r'[–—]\s*[–—]|TBD|Pending', item_text, re.I):
+                                is_completed = True
+                                break
+                    match_item = getattr(match_item, 'parent', None)
+            
+            if is_completed:
+                match_ids.append(match_id)
+                seen_ids.add(match_id)
         else:
+            # Include all matches
             match_ids.append(match_id)
+            seen_ids.add(match_id)
     
-    seen = set()
-    unique_ids = []
-    for mid in match_ids:
-        if mid not in seen:
-            seen.add(mid)
-            unique_ids.append(mid)
+    # Strategy 2: Look for match items in specific containers
+    # Some pages structure matches differently
+    match_containers = soup.find_all(['div', 'li', 'tr'], class_=re.compile(r'match|item', re.I))
+    for container in match_containers:
+        # Find all links in container
+        container_links = container.find_all('a', href=re.compile(r'/\d+/'))
+        for link in container_links:
+            href = link.get('href', '')
+            parts = href.split('/')
+            if len(parts) >= 2 and parts[1].isdigit():
+                match_id = int(parts[1])
+                if match_id not in seen_ids and 1000 <= match_id <= 9999999:
+                    if not completed_only:
+                        match_ids.append(match_id)
+                        seen_ids.add(match_id)
+                    else:
+                        # Check container for completion indicators
+                        container_text = container.get_text(' ', strip=True)
+                        if re.search(r'\d+\s*[:\-]\s*\d+', container_text):
+                            if not re.search(r'[–—]\s*[–—]|TBD|Pending', container_text, re.I):
+                                match_ids.append(match_id)
+                                seen_ids.add(match_id)
     
-    return unique_ids
+    # Strategy 3: Look for data attributes that might contain match IDs
+    data_elements = soup.find_all(attrs={'data-match-id': True}) + \
+                   soup.find_all(attrs={'data-id': True})
+    for elem in data_elements:
+        match_id_str = elem.get('data-match-id') or elem.get('data-id')
+        if match_id_str and match_id_str.isdigit():
+            match_id = int(match_id_str)
+            if match_id not in seen_ids and 1000 <= match_id <= 9999999:
+                if not completed_only:
+                    match_ids.append(match_id)
+                    seen_ids.add(match_id)
+                else:
+                    # Check if completed
+                    elem_text = elem.get_text(' ', strip=True)
+                    if re.search(r'\d+\s*[:\-]\s*\d+', elem_text):
+                        if not re.search(r'[–—]\s*[–—]|TBD|Pending', elem_text, re.I):
+                            match_ids.append(match_id)
+                            seen_ids.add(match_id)
+    
+    # Remove duplicates while preserving order
+    return match_ids
 
 
 def save_match_ids_to_file(match_ids: List[int], filename: str) -> None:

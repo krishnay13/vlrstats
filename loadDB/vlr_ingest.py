@@ -151,29 +151,128 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
     team_a = teams[0].get_text(strip=True) if len(teams) > 0 else 'Unknown'
     team_b = teams[1].get_text(strip=True) if len(teams) > 1 else 'Unknown'
 
+    # Extract scores - handle case where there's a colon span in between
     score_spans = soup.select('.match-header-vs-score .js-spoiler span, .match-header-vs-score span')
     a_score = b_score = 0
-    if len(score_spans) >= 2:
-        try:
-            a_score = int(score_spans[0].get_text(strip=True))
-            b_score = int(score_spans[1].get_text(strip=True))
-        except Exception:
-            a_score = b_score = 0
+    
+    # Filter out colon spans and get numeric scores
+    score_values = []
+    for span in score_spans:
+        text = span.get_text(strip=True)
+        # Skip colon/spacer elements
+        if text and text not in [':', '-', 'vs', 'vs.']:
+            try:
+                score_values.append(int(text))
+            except ValueError:
+                pass
+    
+    if len(score_values) >= 2:
+        a_score, b_score = score_values[0], score_values[1]
+    elif len(score_values) == 1:
+        # Only one score found, might be incomplete
+        a_score = score_values[0]
+    
+    # Fallback: try to extract from text directly
+    if a_score == 0 and b_score == 0:
+        score_container = soup.select_one('.match-header-vs-score')
+        if score_container:
+            score_text = score_container.get_text(' ', strip=True)
+            # Look for pattern like "2:0" or "2 - 0"
+            score_match = re.search(r'(\d+)\s*[:\-]\s*(\d+)', score_text)
+            if score_match:
+                try:
+                    a_score = int(score_match.group(1))
+                    b_score = int(score_match.group(2))
+                except ValueError:
+                    pass
 
+    # Extract tournament and match info with multiple fallbacks
     match_name_elem = soup.select_one('.match-header-event')
-    match_name = match_name_elem.get_text(' ', strip=True) if match_name_elem else url.split('/')[-1]
+    match_name = match_name_elem.get_text(' ', strip=True) if match_name_elem else ''
+    
+    # Fallback: try to get from page title or other elements
+    if not match_name or len(match_name) < 5:
+        title_elem = soup.find('title')
+        if title_elem:
+            title_text = title_elem.get_text(strip=True)
+            # Extract from title like "Team A vs Team B - Tournament Name | VLR.gg"
+            if ' - ' in title_text:
+                match_name = title_text.split(' - ')[0] + ' - ' + title_text.split(' - ')[1].split(' | ')[0]
+            else:
+                match_name = title_text.split(' | ')[0] if ' | ' in title_text else title_text
+    
+    # Final fallback
+    if not match_name or len(match_name) < 5:
+        match_name = url.split('/')[-1].replace('-', ' ').title()
+    
     stage = ''
     tournament = ''
+    
+    # Parse tournament name from match_name
+    # Format is usually: "Tournament Name: Stage: Match Type" or "Tournament Name: Match Type"
     parts = [p.strip() for p in match_name.split(':')]
     if parts:
-        tournament = parts[0]
+        tournament = parts[0].strip()
+    
+    # Extract stage
     if len(parts) >= 2:
-        stage_token = parts[-2]
-        m = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff)', stage_token, re.IGNORECASE)
-        stage = m.group(1) if m else stage_token
+        # Try to find stage in the parts
+        for part in parts[1:-1] if len(parts) > 2 else parts[1:]:
+            stage_match = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff|Regular Season)', part, re.IGNORECASE)
+            if stage_match:
+                stage = stage_match.group(1)
+                break
+            # If no specific stage found, use the part before the last one
+            if part and not stage:
+                stage = part
+    
+    # Fallback: try to get tournament from breadcrumbs or other page elements
+    if not tournament or len(tournament) < 3:
+        breadcrumb = soup.select_one('.breadcrumb, .wf-breadcrumb, nav[aria-label="Breadcrumb"]')
+        if breadcrumb:
+            breadcrumb_text = breadcrumb.get_text(' ', strip=True)
+            # Look for tournament name in breadcrumb
+            if 'VCT' in breadcrumb_text or 'Champions Tour' in breadcrumb_text:
+                # Extract tournament name
+                parts = breadcrumb_text.split()
+                for i, part in enumerate(parts):
+                    if 'VCT' in part or 'Champions' in part:
+                        # Get next few words as tournament name
+                        tournament = ' '.join(parts[i:min(i+5, len(parts))])
+                        break
 
+    # Parse date/time with multiple fallbacks
     dt_utc = _parse_dt_utc(soup)
+    
+    # If no timestamp found, try additional methods
+    if not dt_utc:
+        # Try to find date in match header
+        date_elem = soup.select_one('.match-header-date, .match-date, time[datetime]')
+        if date_elem:
+            datetime_attr = date_elem.get('datetime') or date_elem.get('data-datetime') or date_elem.get('data-utc-ts')
+            if datetime_attr:
+                        try:
+                            # Try to parse various formats
+                            from datetime import datetime
+                            for fmt in ['%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                                try:
+                                    dt = datetime.strptime(datetime_attr.strip(), fmt)
+                                    parsed_dt = dt.isoformat()
+                                    if not parsed_dt.endswith('Z'):
+                                        parsed_dt += 'Z'
+                                    dt_utc = parsed_dt
+                                    break
+                                except:
+                                    continue
+                        except:
+                            pass
+    
     date_str = dt_utc[:10] if dt_utc else None
+    
+    # Ensure we have at least a date - if not, log warning but continue
+    if not date_str and not dt_utc:
+        # Try to extract from URL or other sources as last resort
+        pass  # Will be None, but match will still be saved
 
     maps_info: list[tuple] = []
     players_info: list[tuple] = []
@@ -195,12 +294,44 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         a_map_score = b_map_score = None
         if header:
             header_text = header.get_text(' ', strip=True)
-            m = re.search(r'(\d{1,2})\s*-\s*(\d{1,2})', header_text)
+            # Try multiple patterns for map scores
+            # Pattern 1: "13 TeamA ... TeamB ... 8" (scores at start and end)
+            # Pattern 2: "13 - 8" or "13:8" (dash or colon)
+            # Pattern 3: "TeamA 13 TeamB 8" (scores after team names)
+            
+            # First try dash/colon pattern
+            m = re.search(r'(\d{1,2})\s*[:\-]\s*(\d{1,2})', header_text)
             if m:
                 try:
-                    a_map_score = int(m.group(1)); b_map_score = int(m.group(2))
+                    score1, score2 = int(m.group(1)), int(m.group(2))
+                    # Valid map scores (0-13 for Valorant)
+                    if 0 <= score1 <= 13 and 0 <= score2 <= 13:
+                        a_map_score, b_map_score = score1, score2
                 except Exception:
-                    a_map_score = b_map_score = None
+                    pass
+            
+            # If no dash pattern, try extracting from structure
+            # Look for pattern like "13 TeamA ... TeamB ... 8" or "TeamA 13 ... TeamB 8"
+            if a_map_score is None or b_map_score is None:
+                # Extract all numbers from header
+                numbers = re.findall(r'\b(\d{1,2})\b', header_text)
+                # Filter out time patterns (like 1:02:40) and small numbers that are likely round-by-round
+                valid_scores = []
+                for num_str in numbers:
+                    num = int(num_str)
+                    # Valid map scores are typically 0-13
+                    if 0 <= num <= 13:
+                        valid_scores.append(num)
+                
+                # If we found 2 valid scores, use them
+                # Usually the first and last valid scores are the map scores
+                if len(valid_scores) >= 2:
+                    # Try to find scores near team names or at start/end
+                    # For now, use first and last valid scores
+                    a_map_score, b_map_score = valid_scores[0], valid_scores[-1]
+                elif len(valid_scores) == 1:
+                    # Only one score found, might be incomplete
+                    a_map_score = valid_scores[0]
 
         if a_map_score is not None and b_map_score is not None:
             maps_info.append((mid, game_id, map_name, a_map_score, b_map_score))
@@ -253,22 +384,24 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
 
 def _detect_showmatch(match_name: str, tournament: str = '') -> bool:
     """
-    Detect if a match is a showmatch based on name and tournament.
+    Detect if a match is a showmatch based on match name only.
+    
+    Only checks the match name/title for "showmatch" - not tournament name.
     
     Args:
-        match_name: Name of the match
-        tournament: Tournament name
+        match_name: Name/title of the match
+        tournament: Tournament name (not used, kept for compatibility)
     
     Returns:
-        True if match appears to be a showmatch, False otherwise
+        True if match name contains "showmatch", False otherwise
     """
-    text = f"{tournament} {match_name}".lower()
-    showmatch_indicators = [
-        'showmatch', 'show match', 'show-match',
-        'all-star', 'all star', 'exhibition',
-        'charity match', 'fun match'
-    ]
-    return any(indicator in text for indicator in showmatch_indicators)
+    if not match_name:
+        return False
+    
+    # Only check match name, not tournament name
+    match_name_lower = match_name.lower()
+    # Check for "showmatch" (with or without space/hyphen)
+    return 'showmatch' in match_name_lower or 'show match' in match_name_lower or 'show-match' in match_name_lower
 
 
 async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = None) -> None:
@@ -294,14 +427,16 @@ async def ingest_matches(ids_or_urls: list[str | int], match_type: str | None = 
             if _detect_showmatch(match_name, tournament):
                 match_type = 'SHOWMATCH'
             else:
-                tournament_lower = tournament.lower()
-                if 'vct' in tournament_lower or 'champions tour' in tournament_lower:
+                # Determine based on tournament name
+                tournament_lower = (tournament or '').lower()
+                if 'vct' in tournament_lower or 'champions tour' in tournament_lower or 'valorant champions tour' in tournament_lower:
                     match_type = 'VCT'
                 elif 'vcl' in tournament_lower or 'challengers' in tournament_lower:
                     match_type = 'VCL'
                 elif 'offseason' in tournament_lower:
                     match_type = 'OFFSEASON'
                 else:
+                    # Default to VCT for VCT pages (since we're scraping from vct-2024/vct-2025)
                     match_type = 'VCT'
         
         match_row_list = list(match_row)
