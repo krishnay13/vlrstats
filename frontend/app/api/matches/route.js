@@ -4,35 +4,21 @@ import { NextResponse } from 'next/server';
 import db from '@/app/lib/db.js';
 import { getTournamentSortPriority, getRegionFromMatchName, getRegionSortOrder } from '@/app/lib/region-utils.js';
 import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
+import { getMatchesDateMeta, getMatchDateExpr } from '@/app/lib/db/schema.js';
 
 export async function GET() {
   try {
-    // Check which date columns exist
-    const tableInfo = db.prepare("PRAGMA table_info(Matches)").all();
-    const columns = tableInfo.map(col => col.name);
-    const hasMatchDate = columns.includes('match_date');
-    const hasMatchTsUtc = columns.includes('match_ts_utc');
-    
-    // Fetch all matches - use available date column for sorting
-    let matches;
-    if (hasMatchDate && hasMatchTsUtc) {
-      matches = db.prepare(`
-        SELECT * FROM Matches 
-        ORDER BY COALESCE(match_date, substr(match_ts_utc, 1, 10), '') DESC, match_id DESC
-      `).all();
-    } else if (hasMatchTsUtc) {
-      matches = db.prepare(`
-        SELECT * FROM Matches 
-        ORDER BY match_ts_utc DESC, match_id DESC
-      `).all();
-    } else if (hasMatchDate) {
-      matches = db.prepare(`
-        SELECT * FROM Matches 
-        ORDER BY match_date DESC, match_id DESC
-      `).all();
-    } else {
-      matches = db.prepare('SELECT * FROM Matches ORDER BY match_id DESC').all();
-    }
+    // Check which date columns exist and build a generic sort expression
+    const dateMeta = getMatchesDateMeta(db);
+    const dateExpr = getMatchDateExpr(dateMeta);
+
+    const orderBy =
+      dateExpr != null
+        ? `ORDER BY ${dateExpr} DESC, match_id DESC`
+        : 'ORDER BY match_id DESC';
+
+    // Fetch all matches - use unified date expression for sorting when possible
+    const matches = db.prepare(`SELECT * FROM Matches ${orderBy}`).all();
     
     // Filter out showmatch teams and process matches
     const processedMatches = matches

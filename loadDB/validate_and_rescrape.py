@@ -69,7 +69,8 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
             problems["maps_no_player_stats"].append(mid)
 
         # Check for obviously bad match scores:
-        #  - series cannot end 1–1
+        #  - series cannot end 1–1 (or any non-zero draw)
+        #  - series total rounds can't realistically sum to 1 or 4
         #  - series score should generally equal number of map wins
         cur.execute(
             "SELECT team_a_score, team_b_score FROM Matches WHERE match_id = ?", (mid,)
@@ -81,7 +82,7 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
             a_score = a_score or 0
             b_score = b_score or 0
 
-            # Flag 1–1 (or any non-zero draw) as bad
+            # Flag 1–1 (or any non-zero draw) as bad at the match/series level
             if a_score == b_score and a_score > 0:
                 problems["bad_match_scores"].append(mid)
 
@@ -99,11 +100,25 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
                 )
                 map_rows = cur.fetchall()
                 if map_rows:
-                    a_wins = sum(1 for ta, tb in map_rows if (ta or 0) > (tb or 0))
-                    b_wins = sum(1 for ta, tb in map_rows if (tb or 0) > (ta or 0))
-                    if a_wins + b_wins >= 2:
-                        if a_wins != a_score or b_wins != b_score:
-                            problems["bad_match_scores"].append(mid)
+                    # Check for impossible map-level scores (e.g. very low totals like 1 or 4, or 1–1)
+                    bad_map_score = False
+                    for ta, tb in map_rows:
+                        ta = ta or 0
+                        tb = tb or 0
+                        total = ta + tb
+                        if (ta == tb and ta > 0) or total in (1, 4):
+                            bad_map_score = True
+                            break
+
+                    if bad_map_score:
+                        problems["bad_match_scores"].append(mid)
+                    else:
+                        # Only compare aggregate series score vs map wins if individual maps look sane
+                        a_wins = sum(1 for ta, tb in map_rows if (ta or 0) > (tb or 0))
+                        b_wins = sum(1 for ta, tb in map_rows if (tb or 0) > (ta or 0))
+                        if a_wins + b_wins >= 2:
+                            if a_wins != a_score or b_wins != b_score:
+                                problems["bad_match_scores"].append(mid)
 
     conn.close()
     return problems

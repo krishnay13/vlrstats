@@ -4,68 +4,7 @@ import { NextResponse } from 'next/server';
 import db from '@/app/lib/db.js';
 import { inferTeamRegion, isOlderThanSixMonths } from '@/app/lib/region-utils.js';
 import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
-
-// Get team's last match date (checking all aliases)
-function getTeamLastMatchDate(db, normalizedTeamName) {
-  try {
-    // Get all possible aliases for this team
-    const allVariants = [normalizedTeamName];
-    for (const [variant, canonical] of Object.entries({
-      'via kru esports': 'KRÜ Esports',
-      'via kru': 'KRÜ Esports',
-      'kru esports': 'KRÜ Esports',
-      'kru': 'KRÜ Esports',
-      'visa kru esports': 'KRÜ Esports',
-      'visa kru': 'KRÜ Esports',
-      'movistar koi': 'KOI',
-      'movistar koi(koi)': 'KOI',
-      'koi': 'KOI',
-    })) {
-      if (canonical === normalizedTeamName) {
-        allVariants.push(variant);
-      }
-    }
-    
-    const tableInfo = db.prepare("PRAGMA table_info(Matches)").all();
-    const columns = tableInfo.map(col => col.name);
-    const hasMatchDate = columns.includes('match_date');
-    const hasMatchTsUtc = columns.includes('match_ts_utc');
-    
-    // Build query with all variants
-    const placeholders = allVariants.map(() => '?').join(',');
-    const params = [...allVariants, ...allVariants];
-    
-    let result;
-    if (hasMatchDate && hasMatchTsUtc) {
-      result = db.prepare(`
-        SELECT MAX(COALESCE(match_date, substr(match_ts_utc, 1, 10))) as last_match_date
-        FROM Matches
-        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
-        AND ((match_date IS NOT NULL AND match_date != '') OR (match_ts_utc IS NOT NULL AND match_ts_utc != ''))
-      `).get(...params);
-    } else if (hasMatchTsUtc) {
-      result = db.prepare(`
-        SELECT MAX(match_ts_utc) as last_match_date
-        FROM Matches
-        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
-        AND match_ts_utc IS NOT NULL AND match_ts_utc != ''
-      `).get(...params);
-    } else if (hasMatchDate) {
-      result = db.prepare(`
-        SELECT MAX(match_date) as last_match_date
-        FROM Matches
-        WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
-        AND match_date IS NOT NULL AND match_date != ''
-      `).get(...params);
-    } else {
-      return null;
-    }
-    
-    return result?.last_match_date || null;
-  } catch (e) {
-    return null;
-  }
-}
+import { getTeamLastMatchDate } from '@/app/lib/db/activity.js';
 
 export async function GET() {
   try {
