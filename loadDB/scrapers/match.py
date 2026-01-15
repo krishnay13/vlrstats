@@ -205,24 +205,29 @@ def extract_tournament_info(soup: BeautifulSoup, url: str) -> Tuple[str, str, st
     Returns:
         Tuple of (tournament, stage, match_name)
     """
-    match_name_elem = soup.select_one('.match-header-event, .match-header .event, [class*="event"]')
+    # 1) Match name: primarily from <title>, e.g.:
+    #    "NRG vs. Cloud9 | Champions Tour 2024: Americas Kickoff | Group Stage | Valorant match | VLR.gg"
     match_name = ''
-    if match_name_elem:
-        match_name = match_name_elem.get_text(' ', strip=True)
+    title_elem = soup.find('title')
+    if title_elem:
+        title_text = title_elem.get_text(strip=True)
+        if '|' in title_text:
+            match_name = title_text.split('|', 1)[0].strip()
+        else:
+            match_name = title_text.strip()
     
-    # Fallback: try to get from page title
-    if not match_name or len(match_name) < 5:
-        title_elem = soup.find('title')
-        if title_elem:
-            title_text = title_elem.get_text(strip=True)
-            if ' - ' in title_text:
-                parts = title_text.split(' - ', 1)
-                if len(parts) > 1:
-                    match_name = parts[1].split(' | ')[0].strip()
-            elif ' | ' in title_text:
-                match_name = title_text.split(' | ')[0].strip()
-            else:
-                match_name = title_text.strip()
+    # Fallback: try to get a reasonable name from header/breadcrumbs if title isn't usable
+    if not match_name or len(match_name) < 3:
+        header_vs = soup.select_one('.match-header-vs')
+        if header_vs:
+            txt = header_vs.get_text(' ', strip=True)
+            if txt:
+                match_name = txt
+    
+    if not match_name or len(match_name) < 3:
+        match_name_elem = soup.select_one('.match-header-event, .match-header .event, [class*="event"]')
+        if match_name_elem:
+            match_name = match_name_elem.get_text(' ', strip=True)
     
     # Additional fallback: try breadcrumbs
     if not match_name or len(match_name) < 5:
@@ -246,42 +251,87 @@ def extract_tournament_info(soup: BeautifulSoup, url: str) -> Tuple[str, str, st
     stage = ''
     tournament = ''
     
-    # Parse tournament name from match_name
-    parts = [p.strip() for p in match_name.split(':')]
-    if parts:
-        tournament = parts[0].strip()
+    # 2) Tournament: take the event name from the header card, e.g.:
+    #    <a class="match-header-event">
+    #      <div>
+    #        <div style="font-weight: 700;">Champions Tour 2024: Americas Kickoff</div>
+    #        <div class="match-header-event-series">Group Stage: Winner's (A)</div>
+    #      </div>
+    #    </a>
+    # Strategy 1: Find the parent div container and get first non-series div
+    event_link = soup.select_one('a.match-header-event')
+    if event_link:
+        # Find the inner div container
+        event_container = event_link.find('div')
+        if event_container:
+            # Find all div children
+            divs = event_container.find_all('div', recursive=False)
+            for div in divs:
+                # Skip the series div (has class match-header-event-series)
+                classes = div.get('class', [])
+                if classes and 'match-header-event-series' in classes:
+                    continue
+                # This should be the tournament div
+                tournament = div.get_text(' ', strip=True)
+                if tournament and len(tournament) > 5:
+                    break
     
-    # Extract stage (primary: from parsed match_name)
-    if len(parts) >= 2:
-        for part in parts[1:-1] if len(parts) > 2 else parts[1:]:
-            stage_match = re.search(
-                r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff|Regular Season)',
-                part,
-                re.IGNORECASE,
-            )
-            if stage_match:
-                stage = stage_match.group(1)
-                break
-            if part and not stage:
-                stage = part
-
-    # Fallback: if stage is still empty, try the dedicated header element
-    # Example from VLR:
-    #   <div class="match-header-event-series">
-    #       Group Stage: Winner's (A)
-    #   </div>
-    # We generally want the main stage ("Group Stage"), but will accept the full
-    # string if parsing fails. This is ONLY used when primary parsing above
-    # did not yield anything.
-    if not stage or not stage.strip():
-        series_el = soup.select_one('.match-header-event-series')
-        if series_el:
-            series_text = series_el.get_text(' ', strip=True)
-            if series_text:
-                if ':' in series_text:
-                    stage = series_text.split(':', 1)[0].strip() or series_text.strip()
+    # Strategy 2: Extract tournament from title tag if header extraction failed
+    # Title format: "NRG vs. Cloud9 | Champions Tour 2024: Americas Kickoff | Group Stage | ..."
+    if not tournament or tournament.strip() in ('VCT 2024', 'VCT 2025', 'VCT', ''):
+        if title_elem:
+            title_text = title_elem.get_text(strip=True)
+            if '|' in title_text:
+                parts = [p.strip() for p in title_text.split('|')]
+                # Tournament is typically the second part
+                if len(parts) >= 2:
+                    potential_tournament = parts[1].strip()
+                    # Only use if it looks like a tournament name (has year or "Tour"/"Champions")
+                    if any(x in potential_tournament for x in ['2024', '2025', 'Tour', 'Champions', 'Kickoff', 'Masters', 'Stage']):
+                        tournament = potential_tournament
+    
+    # Strategy 3: Try to get from the event link href attribute
+    if not tournament or tournament.strip() in ('VCT 2024', 'VCT 2025', 'VCT', ''):
+        event_link = soup.select_one('a.match-header-event[href]')
+        if event_link:
+            href = event_link.get('href', '')
+            # href format: "/event/1923/champions-tour-2024-americas-kickoff/group-stage"
+            if '/event/' in href:
+                # Extract the slug part (everything after /event/ and before the next /)
+                parts = href.split('/event/')
+                if len(parts) > 1:
+                    slug_part = parts[1].split('/')[0]  # e.g., "1923/champions-tour-2024-americas-kickoff"
+                    if '/' in slug_part:
+                        slug = slug_part.split('/', 1)[1]  # Get part after ID
+                    else:
+                        slug = slug_part
+                    # Convert slug to readable name: "champions-tour-2024-americas-kickoff" -> "Champions Tour 2024: Americas Kickoff"
+                    tournament = slug.replace('-', ' ').title()
+                    # Fix capitalization for common words
+                    tournament = tournament.replace('Vct', 'VCT').replace('Vcl', 'VCL')
+    
+    # Strategy 4: Extract from URL directly as last resort
+    if not tournament or tournament.strip() in ('VCT 2024', 'VCT 2025', 'VCT', ''):
+        # URL format: "https://www.vlr.gg/295607/nrg-esports-vs-cloud9-champions-tour-2024-americas-kickoff-winners-a"
+        if '/event/' in url:
+            parts = url.split('/event/')
+            if len(parts) > 1:
+                slug_part = parts[1].split('/')[0]
+                if '/' in slug_part:
+                    slug = slug_part.split('/', 1)[1]
                 else:
-                    stage = series_text.strip()
+                    slug = slug_part
+                tournament = slug.replace('-', ' ').title().replace('Vct', 'VCT').replace('Vcl', 'VCL')
+    
+    # 3) Stage (primary): dedicated header element, e.g. "Group Stage: Winner's (A)"
+    series_el = soup.select_one('.match-header-event-series')
+    if series_el:
+        series_text = series_el.get_text(' ', strip=True)
+        if series_text:
+            if ':' in series_text:
+                stage = series_text.split(':', 1)[0].strip() or series_text.strip()
+            else:
+                stage = series_text.strip()
     
     # Fallback: try to get tournament from breadcrumbs
     if not tournament or len(tournament) < 3:

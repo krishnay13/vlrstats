@@ -65,7 +65,7 @@ async def scrape_and_normalize_match(url: str) -> tuple:
         html = await fetch_html(session, url)
     soup = BeautifulSoup(html, 'html.parser')
     
-    # Extract match metadata
+    # Extract match metadata directly from the page
     match_meta = extract_match_metadata(soup, match_id, url)
     
     # Normalize entities using aliases

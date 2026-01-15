@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Sparkles, Users, User, Calendar, Trophy } from 'lucide-react'
+import { Sparkles, Users, User, Calendar, Trophy, Heart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -34,11 +34,16 @@ export default function Navigation() {
             <span className="relative inline-flex h-8 w-8 items-center justify-center">
               <span className="absolute inset-0 rounded-xl bg-emerald-400/30 blur-md" />
               <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-300/40 bg-emerald-500/10 text-emerald-100">
-                <Sparkles className="h-4 w-4" />
+                <div className="relative">
+                  <svg className="h-4 w-4 text-emerald-200" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 22h20L12 2zm0 4.5L18.5 20H5.5L12 6.5z" />
+                  </svg>
+                  <Heart className="absolute inset-0 h-2 w-2 m-auto text-red-400 animate-pulse" style={{ animationDuration: '1s' }} />
+                </div>
               </span>
             </span>
             <span className="text-lg font-semibold tracking-wide bg-gradient-to-r from-emerald-100 to-teal-200 bg-clip-text text-transparent">
-              VLR Pulse
+              VCT Pulse
             </span>
           </Link>
         </motion.div>

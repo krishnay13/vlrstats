@@ -9,6 +9,27 @@ from .config import (
     DB_PATH,
     START_ELO,
     K_BASE,
+    MOV_BASE,
+    MOV_RDIFF_SCALE,
+    ROUND_MARGIN_DIVISOR,
+    ROUND_MARGIN_MIN,
+    ROUND_MARGIN_MAX,
+    ROUND_MARGIN_MAPS_BONUS,
+    IMP_CHAMPIONS,
+    IMP_MASTERS_BASE,
+    IMP_MASTERS_BANGKOK,
+    IMP_MASTERS_TORONTO,
+    IMP_REGIONAL,
+    IMP_VCL,
+    IMP_OFFSEASON,
+    IMP_SHOWMATCH,
+    IMP_MATCH_GRAND_FINAL,
+    IMP_MATCH_FINALS_UPPER_LOWER,
+    IMP_MATCH_SEMIFINAL,
+    IMP_MATCH_QUARTERFINAL,
+    IMP_MATCH_PLAYOFF,
+    IMP_MATCH_ELIM_DECIDER,
+    IMP_MATCH_GROUP_OR_SWISS,
     PLAYER_START_ELO,
     K_PLAYER_BASE,
     PLAYER_INFLUENCE_BETA,
@@ -39,45 +60,50 @@ def canon(name: str | None) -> str:
 def get_importance(tournament: str, stage: str, match_type: str) -> float:
     t = (tournament or '').lower()
     s = (stage or '').lower()
-    m = (match_type or '').lower()
+    mt = (match_type or '').upper()
 
-    # Tournament category (increase gap for internationals)
+    # Tournament category (competition tier)
     if 'champions' in t:
-        t_w = 2.0
+        t_w = IMP_CHAMPIONS
     elif 'masters' in t:
-        # Masters weighting by location/year: downweight Bangkok, keep Toronto closer to Champions
         if 'bangkok' in t:
-            t_w = 1.7
+            t_w = IMP_MASTERS_BANGKOK
         elif 'toronto' in t:
-            t_w = 1.9
+            t_w = IMP_MASTERS_TORONTO
         else:
-            t_w = 1.8
-    elif 'kickoff' in t or 'stage 1' in t or 'stage 2' in t:
-        t_w = 1.0
+            t_w = IMP_MASTERS_BASE
+    elif 'vcl' in t or 'challengers' in t:
+        t_w = IMP_VCL
     else:
-        t_w = 1.0
+        # Default to regional / domestic VCT weight
+        t_w = IMP_REGIONAL
 
-    # Match type weighting within tournament (reintroduced)
-    if any(x in m for x in ['grand final']):
-        m_w = 1.45
-    elif any(x in m for x in ['lower final', 'upper final']):
-        m_w = 1.35
-    elif 'semifinal' in m or 'semi-final' in m:
-        m_w = 1.30
-    elif 'quarterfinal' in m or 'quarter-final' in m:
-        m_w = 1.25
-    elif 'playoffs' in m:
-        m_w = 1.15
-    elif any(x in m for x in ['elimination', 'decider']):
-        m_w = 1.10
-    elif any(x in m for x in ['week', 'group stage', 'swiss']):
-        m_w = 1.0
+    # Adjust for explicit match_type tier when available
+    if mt == 'OFFSEASON':
+        t_w *= IMP_OFFSEASON
+    elif mt == 'SHOWMATCH':
+        t_w *= IMP_SHOWMATCH
+    # VCL is already captured above via tournament name
+
+    # Bracket / match context weighting.
+    # Use stage (and fall back to tournament text) to infer context.
+    ctx = f"{s} {t}".lower()
+    if 'grand final' in ctx:
+        m_w = IMP_MATCH_GRAND_FINAL
+    elif 'lower final' in ctx or 'upper final' in ctx:
+        m_w = IMP_MATCH_FINALS_UPPER_LOWER
+    elif 'semifinal' in ctx or 'semi-final' in ctx:
+        m_w = IMP_MATCH_SEMIFINAL
+    elif 'quarterfinal' in ctx or 'quarter-final' in ctx:
+        m_w = IMP_MATCH_QUARTERFINAL
+    elif 'playoff' in ctx:
+        m_w = IMP_MATCH_PLAYOFF
+    elif 'elimination' in ctx or 'decider' in ctx:
+        m_w = IMP_MATCH_ELIM_DECIDER
+    elif 'group stage' in ctx or 'swiss' in ctx or 'week' in ctx:
+        m_w = IMP_MATCH_GROUP_OR_SWISS
     else:
-        # Fallback: check stage token for group/playoff indicators
-        if 'playoff' in s:
-            m_w = 1.15
-        else:
-            m_w = 1.0
+        m_w = 1.0
     return t_w * m_w
 
 
@@ -86,9 +112,18 @@ def expected_score(r_a: float, r_b: float) -> float:
 
 
 def mov_multiplier(margin: int, rdiff: float) -> float:
-    # Classic Elo MOV adjustment used in basketball elo
-    # ln(1+margin) * 2.2 / (rdiff*0.001 + 2.2)
-    return math.log(1 + max(1, margin)) * 2.2 / (abs(rdiff) * 0.001 + 2.2)
+    """
+    Margin-of-victory multiplier for Elo updates.
+
+    Classic form (basketball Elo):
+        ln(1 + margin) * MOV_BASE / (|rdiff| * MOV_RDIFF_SCALE + MOV_BASE)
+
+    Tuned via MOV_* constants in config.
+    """
+    effective_margin = max(1, margin)
+    numerator = math.log(1 + effective_margin) * MOV_BASE
+    denominator = abs(rdiff) * MOV_RDIFF_SCALE + MOV_BASE
+    return numerator / denominator if denominator > 0 else 1.0
 
 
 def get_round_margin(cur: sqlite3.Cursor, match_id: int) -> float | None:
@@ -117,9 +152,16 @@ def get_round_margin(cur: sqlite3.Cursor, match_id: int) -> float | None:
             return None
         raw_round_margin = abs(float(total_a) - float(total_b))
         avg_round_margin = raw_round_margin / float(maps_played)
-        # Scale down and clamp to a sensible range
-        scaled = avg_round_margin / 2.0
-        return float(max(1.0, min(8.0, scaled)))
+        # Scale down and clamp to a sensible range, with optional series-length bonus.
+        scaled = avg_round_margin / float(ROUND_MARGIN_DIVISOR)
+        if ROUND_MARGIN_MAPS_BONUS > 0.0:
+            scaled *= 1.0 + ROUND_MARGIN_MAPS_BONUS * max(0, int(maps_played) - 1)
+        return float(
+            max(
+                ROUND_MARGIN_MIN,
+                min(ROUND_MARGIN_MAX, scaled),
+            )
+        )
     except Exception:
         return None
 
@@ -294,7 +336,14 @@ def get_team_avg_rating(cur: sqlite3.Cursor, match_id: int, team: str) -> float 
     return float(sum(vals) / len(vals))
 
 
-def compute_elo(save: bool = False, top: int = 20, start_date: str | None = None, end_date: str | None = None):
+def compute_elo(
+    save: bool = False,
+    top: int = 20,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    recency_half_life: float | None = None,
+    delta_summary: bool = False,
+):
     """
     Compute Elo ratings from matches in the database.
     
@@ -349,7 +398,10 @@ def compute_elo(save: bool = False, top: int = 20, start_date: str | None = None
     player_history_rows = []
     player_teams: dict[str, str | None] = {}
 
-    for match_id, tournament, stage, match_type, match_name, ta, tb, ta_score, tb_score in matches:
+    total_matches = len(matches)
+    per_team_deltas: list[float] = []
+
+    for idx, (match_id, tournament, stage, match_type, match_name, ta, tb, ta_score, tb_score) in enumerate(matches):
         try:
             a = normalize_team(ta)
             b = normalize_team(tb)
@@ -396,12 +448,22 @@ def compute_elo(save: bool = False, top: int = 20, start_date: str | None = None
             mult = mov_multiplier(use_margin, rdiff)
             k_eff = k * imp * mult
 
+            # Optional recency weighting: downweight older matches relative to newer ones.
+            if recency_half_life and recency_half_life > 0 and total_matches > 0:
+                age = float(total_matches - idx - 1)
+                # Each half_life worth of age halves the effective K
+                recency_factor = 0.5 ** (age / recency_half_life)
+                k_eff *= recency_factor
+
             # Update team ratings only when we have a known result
             new_ra = ra
             new_rb = rb
             if team_update:
-                new_ra = ra + k_eff * (sa - exp_a)
-                new_rb = rb + k_eff * (sb - exp_b)
+                delta_a = k_eff * (sa - exp_a)
+                delta_b = k_eff * (sb - exp_b)
+                new_ra = ra + delta_a
+                new_rb = rb + delta_b
+                per_team_deltas.extend([delta_a, delta_b])
 
             if save and team_update:
                 # Store the margin actually used (round-based if present)
@@ -478,6 +540,20 @@ def compute_elo(save: bool = False, top: int = 20, start_date: str | None = None
         except Exception as e:
             print(f"[WARN] Skipping match {match_id} due to error: {e}")
             continue
+
+    if delta_summary and per_team_deltas:
+        abs_deltas = [abs(d) for d in per_team_deltas]
+        abs_deltas.sort()
+        n = len(abs_deltas)
+        avg_delta = sum(abs_deltas) / float(n)
+        p95_idx = max(0, int(0.95 * n) - 1)
+        p95_delta = abs_deltas[p95_idx]
+        max_delta = abs_deltas[-1]
+        print("\nElo delta summary (per team per match):")
+        print(f"  Samples      : {n}")
+        print(f"  Avg |Δrating|: {avg_delta:.2f}")
+        print(f"  95th pct     : {p95_delta:.2f}")
+        print(f"  Max |Δrating|: {max_delta:.2f}")
 
     if save:
         # Reset history before saving to avoid duplicates across runs
@@ -703,11 +779,27 @@ if __name__ == "__main__":
     parser.add_argument("--save", action="store_true", help="Save Elo history and current ratings to DB")
     parser.add_argument("--top", type=int, default=20, help="Number of top teams to display")
     parser.add_argument("--top-players", type=int, default=0, help="Number of top players to display from Player_Elo_Current")
+    parser.add_argument(
+        "--recency-half-life",
+        type=float,
+        default=None,
+        help="Optional half-life in matches for recency weighting (larger = slower decay, omit to disable)",
+    )
+    parser.add_argument(
+        "--delta-summary",
+        action="store_true",
+        help="Print summary statistics of Elo rating deltas (per team per match)",
+    )
     parser.add_argument("--team", type=str, help="Show Elo history breakdown for a specific team")
     parser.add_argument("--swings", action="store_true", help="Show largest positive/negative Elo swings")
     parser.add_argument("--limit", type=int, default=10, help="Number of swings to display per direction")
     args = parser.parse_args()
-    compute_elo(save=args.save, top=args.top)
+    compute_elo(
+        save=args.save,
+        top=args.top,
+        recency_half_life=args.recency_half_life,
+        delta_summary=args.delta_summary,
+    )
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()

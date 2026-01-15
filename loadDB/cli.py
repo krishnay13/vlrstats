@@ -17,6 +17,17 @@ def main():
     p_elo.add_argument("action", choices=["compute"], help="Elo action")
     p_elo.add_argument("--save", action="store_true", help="Persist history and snapshots")
     p_elo.add_argument("--top", type=int, default=20, help="Print top N teams after compute")
+    p_elo.add_argument(
+        "--recency-half-life",
+        type=float,
+        default=None,
+        help="Optional half-life in matches for recency weighting (larger = slower decay, omit to disable)",
+    )
+    p_elo.add_argument(
+        "--delta-summary",
+        action="store_true",
+        help="Print summary statistics of Elo rating deltas (per team per match)",
+    )
 
     p_show = sub.add_parser("show", help="Display current snapshots or histories")
     p_show_sub = p_show.add_subparsers(dest="show_cmd", required=True)
@@ -63,6 +74,22 @@ def main():
     p_rescrape_empty_stage = sub.add_parser("rescrape-empty-stage", help="Rescrape matches with empty stage fields (e.g., misparsed tournaments like 'NRG vs. Cloud9')")
     p_rescrape_empty_stage.add_argument("--limit", type=int, default=None, help="Optional limit on number of matches to rescrape")
 
+    p_rescrape_bad_meta = sub.add_parser(
+        "rescrape-bad-metadata",
+        help="Rescrape VCT matches with generic/empty tournament names and refresh their metadata/maps/player stats",
+    )
+    p_rescrape_bad_meta.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional limit on number of matches to rescrape",
+    )
+    p_rescrape_bad_meta.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip data validation during rescrape",
+    )
+
     p_test_matches = sub.add_parser("test-matches", help="Test random matches for data quality")
     p_test_matches.add_argument("-n", "--num", type=int, default=10, help="Number of random matches to test")
 
@@ -82,7 +109,12 @@ def main():
         return
 
     if args.cmd == "elo" and args.action == "compute":
-        compute_elo(save=args.save, top=args.top)
+        compute_elo(
+            save=args.save,
+            top=args.top,
+            recency_half_life=getattr(args, "recency_half_life", None),
+            delta_summary=getattr(args, "delta_summary", False),
+        )
         return
 
     if args.cmd == "show":
@@ -258,6 +290,91 @@ def main():
         from .scrape_all_vct import main as scrape_main
         asyncio.run(scrape_main())
         return
+
+    if args.cmd == "rescrape-bad-metadata":
+        from .db_utils import get_conn
+        from .ingestion import ingest_from_urls
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # Find VCT matches with clearly bad/suspicious metadata.
+        # Heuristics:
+        # - match_type is VCT (or empty/unknown)
+        # - AND at least ONE of:
+        #     * tournament is generic/flattened or empty (e.g. 'VCT 2024', 'VCT 2025', '')
+        #     * stage is empty/NULL
+        #     * match_name looks like a tournament (starts with 'VCT ' or 'Champions Tour ')
+        #       or exactly equals the tournament name (tournament accidentally stored as match_name)
+        cur.execute(
+            """
+            SELECT match_id
+            FROM Matches
+            WHERE (match_type = 'VCT' OR TRIM(IFNULL(match_type, '')) = '')
+              AND (
+                    TRIM(IFNULL(tournament, '')) IN ('VCT 2024', 'VCT 2025', '')
+                 OR stage IS NULL
+                 OR TRIM(stage) = ''
+                 OR UPPER(TRIM(IFNULL(match_name, ''))) = UPPER(TRIM(IFNULL(tournament, '')))
+                 OR UPPER(TRIM(IFNULL(match_name, ''))) LIKE 'VCT 20__%'
+                 OR UPPER(TRIM(IFNULL(match_name, ''))) LIKE 'CHAMPIONS TOUR 20__%'
+              )
+            ORDER BY match_id
+            """
+        )
+        rows = cur.fetchall()
+        conn.close()
+
+        match_ids = [row[0] for row in rows]
+        total_found = len(match_ids)
+
+        if args.limit is not None:
+            match_ids = match_ids[: args.limit]
+
+        if not match_ids:
+            print("No VCT matches with generic/empty tournament metadata found.")
+            return 0
+
+        print(
+            f"Found {total_found} VCT match(es) with generic/empty tournament names; "
+            f"rescraping {len(match_ids)} of them..."
+        )
+
+        urls = [f"https://www.vlr.gg/{mid}" for mid in match_ids]
+
+        try:
+            result = asyncio.run(
+                ingest_from_urls(
+                    urls,
+                    validate=not args.no_validate,
+                    match_type="VCT",
+                )
+            )
+        except Exception as e:
+            print(f"Error rescraping bad-metadata matches: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
+
+        print("\nRescrape (bad metadata) complete:")
+        print(f"  Success: {result.success_count}")
+        print(f"  Errors: {result.error_count}")
+        if result.skipped_count > 0:
+            print(f"  Skipped (showmatches): {result.skipped_count}")
+        if result.warnings:
+            print(f"  Warnings: {len(result.warnings)}")
+            for warning in result.warnings[:5]:
+                print(f"    - {warning}")
+            if len(result.warnings) > 5:
+                print(f"    ... and {len(result.warnings) - 5} more warnings")
+        if result.errors:
+            print(f"  Error details:")
+            for error in result.errors[:5]:
+                print(f"    - {error}")
+            if len(result.errors) > 5:
+                print(f"    ... and {len(result.errors) - 5} more errors")
+
+        return 0
 
     if args.cmd == "rescrape-empty-stage":
         from .db_utils import get_conn

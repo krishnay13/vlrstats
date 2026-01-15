@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { Trophy, TrendingUp, Users, Calendar, ArrowRight, BarChart3, Sparkles, Clock } from 'lucide-react'
+import { Trophy, TrendingUp, Users, Calendar, ArrowRight, BarChart3, Sparkles, Clock, Heart } from 'lucide-react'
 import { fetchJson } from '@/app/lib/api'
 
 const formatMatchDate = (match) => {
@@ -48,6 +48,8 @@ const DATE_RANGES = [
 
 export default function HomePage() {
   const [upcomingMatches, setUpcomingMatches] = useState([])
+  const [allMatches, setAllMatches] = useState([])
+  const [showAll, setShowAll] = useState(false)
   const [matchesLoading, setMatchesLoading] = useState(true)
   const [elo, setElo] = useState({ teams: [], players: [] })
   const [eloLoading, setEloLoading] = useState(true)
@@ -56,16 +58,27 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchUpcomingMatches() {
       try {
-        const data = await fetchJson('/api/upcoming-matches')
-        setUpcomingMatches(data || [])
+        const data = await fetchJson('/api/vct-upcoming-matches')
+        setAllMatches(data || [])
+        setUpcomingMatches((data || []).slice(0, 5))
       } catch (error) {
         console.error('Failed to fetch upcoming matches:', error)
+        // Fallback to database matches
+        try {
+          const dbData = await fetchJson('/api/upcoming-matches')
+          setAllMatches(dbData || [])
+          setUpcomingMatches((dbData || []).slice(0, 5))
+        } catch (dbError) {
+          console.error('Failed to fetch database matches:', dbError)
+        }
       } finally {
         setMatchesLoading(false)
       }
     }
     fetchUpcomingMatches()
   }, [])
+
+  const displayedMatches = showAll ? allMatches : upcomingMatches
 
   useEffect(() => {
     async function fetchElo() {
@@ -87,7 +100,16 @@ export default function HomePage() {
     <div className="relative inline-flex items-center justify-center">
       <div className="absolute inset-0 rounded-full bg-emerald-400/30 blur-2xl" />
       <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-500/10 text-emerald-200 shadow-[0_0_35px_rgba(16,185,129,0.45)]">
-        <Sparkles className="h-8 w-8" />
+        <div className="relative">
+          {/* Valorant V symbol */}
+          <svg className="h-8 w-8 text-emerald-200" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 22h20L12 2zm0 4.5L18.5 20H5.5L12 6.5z" />
+          </svg>
+          {/* Heartbeat pulse overlay */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Heart className="h-4 w-4 text-red-400 animate-pulse" style={{ animationDuration: '1s' }} />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -118,7 +140,7 @@ export default function HomePage() {
               className="mb-6 text-4xl font-semibold tracking-tight sm:text-6xl md:text-7xl"
             >
               <span className="bg-gradient-to-r from-emerald-200 via-emerald-100 to-teal-200 bg-clip-text text-transparent">
-                VLR Pulse
+                VCT Pulse
               </span>
             </motion.h1>
             <motion.p
@@ -127,8 +149,8 @@ export default function HomePage() {
               transition={{ delay: 0.4 }}
               className="mb-8 text-lg text-emerald-100/70 sm:text-xl"
             >
-              Precision Elo signals, match insights, and performance context for Valorant esports.
-              Built to feel like a sleek overlay of the scene.
+              Real-time VCT match tracking, Elo rankings, and performance analytics.
+              Your pulse on the Valorant Champions Tour.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -191,7 +213,7 @@ export default function HomePage() {
               className="h-6 w-6 rounded-full border-2 border-emerald-300/70 border-t-transparent"
             />
           </div>
-        ) : upcomingMatches.length === 0 ? (
+        ) : displayedMatches.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -201,8 +223,9 @@ export default function HomePage() {
             <p className="mt-4 text-white/60">No upcoming matches scheduled</p>
           </motion.div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {upcomingMatches.map((match, index) => (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {displayedMatches.map((match, index) => (
               <motion.div
                 key={match.match_id}
                 initial={{ opacity: 0, y: 20 }}
@@ -218,12 +241,12 @@ export default function HomePage() {
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-white/60">
                       <Clock className="h-3.5 w-3.5" />
-                      <span>{formatMatchDate(match)}</span>
+                      <span>{match.date_text || match.time_text || formatMatchDate(match)}</span>
                     </div>
-                    {match.tournament_logo && (
+                    {match.event_logo && (
                       <img
-                        src={match.tournament_logo}
-                        alt={match.tournament}
+                        src={match.event_logo}
+                        alt={match.event_name}
                         className="h-4 w-4 object-contain opacity-60"
                       />
                     )}
@@ -231,15 +254,7 @@ export default function HomePage() {
                   
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
-                      {match.team_a_logo ? (
-                        <img
-                          src={match.team_a_logo}
-                          alt={match.team_a}
-                          className="h-5 w-5 object-contain"
-                        />
-                      ) : (
-                        <div className="h-5 w-5 rounded bg-white/10" />
-                      )}
+                      <div className="h-5 w-5 rounded bg-white/10" />
                       <span className="text-sm font-medium text-white">{match.team_a}</span>
                     </div>
                     
@@ -250,31 +265,34 @@ export default function HomePage() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      {match.team_b_logo ? (
-                        <img
-                          src={match.team_b_logo}
-                          alt={match.team_b}
-                          className="h-5 w-5 object-contain"
-                        />
-                      ) : (
-                        <div className="h-5 w-5 rounded bg-white/10" />
-                      )}
+                      <div className="h-5 w-5 rounded bg-white/10" />
                       <span className="text-sm font-medium text-white">{match.team_b}</span>
                     </div>
                   </div>
 
-                  {(match.tournament || match.stage) && (
+                  {match.event_name && (
                     <div className="mt-4 pt-4 border-t border-white/5">
                       <p className="text-xs text-white/50 truncate">
-                        {match.tournament}
-                        {match.stage && ` • ${match.stage}`}
+                        {match.event_name}
                       </p>
                     </div>
                   )}
                 </Link>
               </motion.div>
-            ))}
-          </div>
+              ))}
+            </div>
+            {allMatches.length > 5 && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setShowAll(!showAll)}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10"
+                >
+                  {showAll ? 'Show Less' : `View More (${allMatches.length - 5} more)`}
+                  <ArrowRight className={`h-4 w-4 transition-transform ${showAll ? 'rotate-90' : ''}`} />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 
