@@ -84,6 +84,8 @@ def upsert_maps(conn: sqlite3.Connection, maps: list[tuple]) -> dict[tuple[int, 
     """
     Insert or update map records and return a lookup dictionary.
     
+    Always inserts maps even if scores are None, to ensure consistency.
+    
     Args:
         conn: Database connection
         maps: List of tuples (match_id, game_id, map_name, team_a_score, team_b_score)
@@ -94,14 +96,24 @@ def upsert_maps(conn: sqlite3.Connection, maps: list[tuple]) -> dict[tuple[int, 
     cur = conn.cursor()
     lookup: dict[tuple[int, str], int] = {}
     for match_id, game_id, map_name, ta_score, tb_score in maps:
+        # Ensure map_name is not None or empty
+        if not map_name or map_name == '':
+            map_name = 'Unknown'
+        
+        # Validate scores are within reasonable range
+        if ta_score is not None and (ta_score < 0 or ta_score > 13):
+            ta_score = None
+        if tb_score is not None and (tb_score < 0 or tb_score > 13):
+            tb_score = None
+        
         cur.execute(
             """
             INSERT INTO Maps (match_id, game_id, map, team_a_score, team_b_score)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(match_id, game_id) DO UPDATE SET
-                map=excluded.map,
-                team_a_score=excluded.team_a_score,
-                team_b_score=excluded.team_b_score
+                map=COALESCE(excluded.map, Maps.map),
+                team_a_score=COALESCE(excluded.team_a_score, Maps.team_a_score),
+                team_b_score=COALESCE(excluded.team_b_score, Maps.team_b_score)
             """,
             (match_id, game_id, map_name, ta_score, tb_score),
         )
@@ -116,6 +128,8 @@ def upsert_player_stats(conn: sqlite3.Connection, stats: list[tuple], map_lookup
     """
     Insert or update player statistics records.
     
+    Handles missing map_id by looking it up, and validates stat values.
+    
     Args:
         conn: Database connection
         stats: List of tuples (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
@@ -123,23 +137,56 @@ def upsert_player_stats(conn: sqlite3.Connection, stats: list[tuple], map_lookup
     """
     cur = conn.cursor()
     for match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists in stats:
+        # Skip if player name is missing
+        if not player or player == '' or player == 'Unknown':
+            continue
+        
+        # Look up map_id
         map_id = map_lookup.get((match_id, game_id))
         if map_id is None:
             cur.execute("SELECT id FROM Maps WHERE match_id = ? AND game_id = ?", (match_id, game_id))
             row = cur.fetchone()
             map_id = int(row[0]) if row else None
+        
+        # If still no map_id, try to create/find the map
+        if map_id is None:
+            # Try to insert a placeholder map if it doesn't exist
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO Maps (match_id, game_id, map, team_a_score, team_b_score)
+                VALUES (?, ?, 'Unknown', NULL, NULL)
+                """,
+                (match_id, game_id),
+            )
+            cur.execute("SELECT id FROM Maps WHERE match_id = ? AND game_id = ?", (match_id, game_id))
+            row = cur.fetchone()
+            map_id = int(row[0]) if row else None
+        
+        # Skip if we still don't have a map_id
+        if map_id is None:
+            continue
+        
+        # Validate and clean stat values
+        team = team or 'Unknown'
+        agent = agent or 'Unknown'
+        rating = max(0.0, min(5.0, rating)) if rating is not None else 0.0
+        acs = max(0, min(500, int(acs))) if acs is not None else 0
+        kills = max(0, int(kills)) if kills is not None else 0
+        deaths = max(0, int(deaths)) if deaths is not None else 0
+        assists = max(0, int(assists)) if assists is not None else 0
+        
         cur.execute(
             """
             INSERT INTO Player_Stats (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(match_id, map_id, player) DO UPDATE SET
-                team=excluded.team,
-                agent=excluded.agent,
-                rating=excluded.rating,
-                acs=excluded.acs,
-                kills=excluded.kills,
-                deaths=excluded.deaths,
-                assists=excluded.assists
+                team=COALESCE(excluded.team, Player_Stats.team),
+                agent=COALESCE(excluded.agent, Player_Stats.agent),
+                rating=COALESCE(excluded.rating, Player_Stats.rating),
+                acs=COALESCE(excluded.acs, Player_Stats.acs),
+                kills=COALESCE(excluded.kills, Player_Stats.kills),
+                deaths=COALESCE(excluded.deaths, Player_Stats.deaths),
+                assists=COALESCE(excluded.assists, Player_Stats.assists)
             """,
             (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists),
         )

@@ -25,7 +25,7 @@ def backfill_missing_timestamps(limit: int = 100):
 
     async def run(ids_):
         for mid in ids_:
-            match_row, maps_info, players_info = await scrape_match(mid)
+            match_row, maps_info, players_info, _ = await scrape_match(mid)
             cur2 = conn.cursor()
             ts_utc = match_row[-2]
             cur2.execute(

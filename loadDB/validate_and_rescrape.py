@@ -70,6 +70,7 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
 
         # Check for obviously bad match scores:
         #  - series cannot end 1–1 (or any non-zero draw)
+        #  - winners should not have only 1 map (user requirement: teams cannot win by 1 or 0 maps)
         #  - series total rounds can't realistically sum to 1 or 4
         #  - series score should generally equal number of map wins
         cur.execute(
@@ -82,9 +83,31 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
             a_score = a_score or 0
             b_score = b_score or 0
 
-            # Flag 1–1 (or any non-zero draw) as bad at the match/series level
+            # Flag ALL non-zero draws as bad - VCT matches never end in draws
+            # Every match is played to completion (2-0, 2-1, 3-0, 3-1, 3-2, etc.)
             if a_score == b_score and a_score > 0:
                 problems["bad_match_scores"].append(mid)
+
+            # Flag any series where the winner has only 1 map as wrong
+            # EXCEPT for showmatches, which are typically only 1 map (BO1)
+            max_score = max(a_score, b_score)
+            if max_score > 0 and max_score < 2:
+                # Check if this is a showmatch - check match_type field first, then fallback to name/tournament
+                cur.execute("SELECT match_name, tournament, match_type FROM Matches WHERE match_id = ?", (mid,))
+                match_info = cur.fetchone()
+                if match_info:
+                    match_type = (match_info[2] or '').upper() if len(match_info) > 2 else ''
+                    # Check match_type field first (most reliable)
+                    is_showmatch = match_type == 'SHOWMATCH'
+                    if not is_showmatch:
+                        # Fallback: check match_name and tournament fields
+                        match_name = (match_info[0] or '').lower()
+                        tournament = (match_info[1] or '').lower()
+                        is_showmatch = 'showmatch' in match_name or 'showmatch' in tournament
+                    if not is_showmatch:
+                        problems["bad_match_scores"].append(mid)
+                else:
+                    problems["bad_match_scores"].append(mid)
 
             # Compare against map wins if we have maps with scores
             if map_count > 0:
@@ -100,13 +123,22 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
                 )
                 map_rows = cur.fetchall()
                 if map_rows:
-                    # Check for impossible map-level scores (e.g. very low totals like 1 or 4, or 1–1)
+                    # Check for impossible map-level scores
+                    # Note: 12-12 is an intermediate overtime score, not a final score
+                    # Final scores in overtime will be higher (e.g., 15-17)
                     bad_map_score = False
                     for ta, tb in map_rows:
                         ta = ta or 0
                         tb = tb or 0
                         total = ta + tb
-                        if (ta == tb and ta > 0) or total in (1, 4):
+                        # Flag very low totals (1, 4) as suspicious
+                        # Flag draws only if they're very low scores (not 12-12 which is intermediate, not 13-13 which is legitimate)
+                        # 12-12 means the map went to overtime but we didn't get the final score
+                        if total in (1, 4) or (ta == tb and ta > 0 and ta < 10 and ta != 12):
+                            bad_map_score = True
+                            break
+                        # Also flag 12-12 as it's an intermediate score, not final
+                        if ta == 12 and tb == 12:
                             bad_map_score = True
                             break
 

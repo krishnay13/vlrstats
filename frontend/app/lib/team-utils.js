@@ -61,6 +61,8 @@ const SHOWMATCH_TEAMS = [
   'team toast',
   'team alpha',
   'team omega',
+  'pure aim',
+  'precise defeat',
 ];
 
 /**

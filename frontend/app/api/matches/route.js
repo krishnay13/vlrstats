@@ -37,9 +37,16 @@ export async function GET() {
         const tournament = match.tournament || 'Unknown Event';
         const stage = match.stage || '';
         const matchName = match.match_name || '';
+        const matchNameLower = matchName.toLowerCase();
+        const tournamentLower = tournament.toLowerCase();
         
-        // Skip showmatch stages
-        if (stage.toLowerCase().includes('showmatch')) {
+        // Skip explicit showmatches / all-star style events
+        if (
+          stage.toLowerCase().includes('showmatch') ||
+          matchNameLower.includes('showmatch') ||
+          matchNameLower.includes('all-star') ||
+          tournamentLower.includes('showmatch')
+        ) {
           return null;
         }
         

@@ -254,7 +254,7 @@ async def classify_matches(match_ids_with_names: List[Tuple[int, str]]) -> Dict[
             print(f"  Progress: {i}/{len(match_ids_with_names)}")
         
         try:
-            match_row, _, _ = await scrape_match(match_id)
+            match_row, _, _, _ = await scrape_match(match_id)
             match_name = match_row[4] if len(match_row) > 4 else ''
             
             if detect_showmatch(match_name, tournament_name):

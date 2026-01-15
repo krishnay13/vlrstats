@@ -5,10 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Users, User, Trophy } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
+import { fetchJson } from '@/app/lib/api'
 
 export default function TeamDetailsPage() {
   const params = useParams()
@@ -19,15 +16,16 @@ export default function TeamDetailsPage() {
   useEffect(() => {
     async function fetchTeamDetails() {
       try {
-        const res = await fetch(`/api/teams/${params.team_id}`, { cache: 'no-store' })
-        if (!res.ok) {
-          if (res.status === 404) {
+        let teamData
+        try {
+          teamData = await fetchJson(`/api/teams/${params.team_id}`)
+        } catch (err) {
+          if (err?.message?.includes('404')) {
             setError('Team not found')
             return
           }
-          throw new Error('Failed to fetch team details')
+          throw err
         }
-        const teamData = await res.json()
         setData(teamData)
       } catch (err) {
         setError(err.message)
@@ -41,11 +39,11 @@ export default function TeamDetailsPage() {
   if (loading) {
     return (
       <div className="container py-12">
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex min-h-[400px] items-center justify-center">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
+            className="h-8 w-8 rounded-full border-2 border-emerald-300/70 border-t-transparent"
           />
         </div>
       </div>
@@ -55,49 +53,49 @@ export default function TeamDetailsPage() {
   if (error || !data) {
     return (
       <div className="container py-12">
-        <Card>
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{error || 'Team not found'}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link href="/teams">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Teams
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="text-lg font-semibold text-white">Error</h2>
+          <p className="mt-2 text-sm text-white/60">{error || 'Team not found'}</p>
+          <Link
+            href="/teams"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:border-white/30 hover:bg-white/10"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Teams
+          </Link>
+        </div>
       </div>
     )
   }
 
-  const { team, players } = data
+  const { team, activePlayers = [], inactivePlayers = [] } = data
+  const totalPlayers = activePlayers.length + inactivePlayers.length
 
   return (
-    <div className="container py-8">
+    <div className="container py-10">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <Button asChild variant="ghost" className="mb-4">
-          <Link href="/teams">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Teams
-          </Link>
-        </Button>
+        <Link
+          href="/teams"
+          className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:border-white/30 hover:bg-white/10"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Teams
+        </Link>
 
-        <div className="flex items-center space-x-4 mb-6">
-          <Avatar className="h-20 w-20">
-            <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
-              {team.team_name?.charAt(0) || 'T'}
-            </AvatarFallback>
-          </Avatar>
+        <div className="flex items-center gap-4">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-300/30 bg-emerald-500/10 text-3xl font-semibold text-emerald-100">
+            {team.team_name?.charAt(0) || 'T'}
+          </div>
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">{team.team_name}</h1>
-            <p className="text-muted-foreground">Team #{team.team_id}</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{team.team_name}</h1>
+            <p className="text-sm text-white/60">
+              {team.region !== 'UNKNOWN' ? `${team.region} • ` : ''}
+              {team.is_inactive ? 'Inactive' : 'Active'}
+            </p>
           </div>
         </div>
       </motion.div>
@@ -107,60 +105,101 @@ export default function TeamDetailsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl flex items-center">
-                  <Users className="mr-2 h-5 w-5" />
-                  Roster
-                </CardTitle>
-                <CardDescription>
-                  {players.length} player{players.length !== 1 ? 's' : ''} on this team
-                </CardDescription>
-              </div>
-              <Badge variant="secondary">{players.length} Players</Badge>
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+            <div>
+              <h2 className="flex items-center text-2xl font-semibold">
+                <Users className="mr-2 h-5 w-5 text-emerald-200" />
+                Roster
+              </h2>
+              <p className="text-sm text-white/60">
+                {totalPlayers} player{totalPlayers !== 1 ? 's' : ''} on this team
+              </p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {players.map((player, index) => (
-                <motion.div
-                  key={player.player_id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  whileHover={{ scale: 1.02 }}
-                >
-                  <Card className="border-2 transition-all hover:border-primary/50 hover:shadow-md">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center space-x-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                            {player.player_name?.charAt(0) || 'P'}
-                          </AvatarFallback>
-                        </Avatar>
+            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
+              {totalPlayers} Players
+            </span>
+          </div>
+
+          <div className="mt-5 space-y-8">
+            {activePlayers.length > 0 && (
+              <div>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                  <Trophy className="h-4 w-4" />
+                  Active Roster
+                </h3>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {activePlayers.map((player, index) => (
+                    <motion.div
+                      key={player.player_name}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02 }}
+                      className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-500/10 text-lg font-semibold text-emerald-100">
+                          {player.player_name?.charAt(0) || 'P'}
+                        </div>
                         <div className="flex-1">
-                          <div className="font-semibold text-lg">{player.player_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            Player #{player.player_id}
-                          </div>
+                          <div className="text-base font-semibold text-white">{player.player_name}</div>
+                          {player.last_match_date && (
+                            <div className="text-xs text-white/60">
+                              Last match: {player.last_match_date.slice(0, 10)}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-
-            {players.length === 0 && (
-              <div className="text-center py-12">
-                <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No players found for this team.</p>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+
+            {inactivePlayers.length > 0 && (
+              <div>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/50">
+                  <User className="h-4 w-4" />
+                  Inactive / Former Players
+                </h3>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {inactivePlayers.map((player, index) => (
+                    <motion.div
+                      key={player.player_name}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02 }}
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg font-semibold text-white/60">
+                          {player.player_name?.charAt(0) || 'P'}
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-base font-semibold text-white">{player.player_name}</div>
+                          {player.last_match_date && (
+                            <div className="text-xs text-white/50">
+                              Last match: {player.last_match_date.slice(0, 10)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {totalPlayers === 0 && (
+              <div className="py-12 text-center">
+                <User className="mx-auto mb-4 h-12 w-12 text-white/40" />
+                <p className="text-white/60">No players found for this team.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </motion.div>
     </div>
   )

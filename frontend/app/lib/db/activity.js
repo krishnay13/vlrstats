@@ -4,18 +4,28 @@ import { getMatchesDateMeta, getMatchDateExpr, getMatchDateNonEmptyWhere } from 
 import { normalizeTeamName } from '../team-utils.js';
 
 // Build all known variants for certain teams (manual alias expansion)
-function buildTeamVariants(normalizedTeamName) {
+export function buildTeamVariants(normalizedTeamName) {
   const allVariants = [normalizedTeamName];
   const aliasMap = {
+    // KRÜ aliases
     'via kru esports': 'KRÜ Esports',
     'via kru': 'KRÜ Esports',
     'kru esports': 'KRÜ Esports',
     'kru': 'KRÜ Esports',
     'visa kru esports': 'KRÜ Esports',
     'visa kru': 'KRÜ Esports',
+    // KOI aliases
     'movistar koi': 'KOI',
     'movistar koi(koi)': 'KOI',
     'koi': 'KOI',
+    // Bilibili Gaming aliases (match DB spellings)
+    'Guangzhou Huadu Bilibili Gaming(Bilibili Gaming)': 'Bilibili Gaming',
+    'Guangzhou Huadu Bilibili Gaming': 'Bilibili Gaming',
+    'Bilibili Gaming': 'Bilibili Gaming',
+    // JDG Esports aliases (match DB spellings)
+    'JD Mall JDG Esports(JDG Esports)': 'JDG Esports',
+    'JD Mall JDG Esports': 'JDG Esports',
+    'JDG Esports': 'JDG Esports',
   };
 
   for (const [variant, canonical] of Object.entries(aliasMap)) {
@@ -32,6 +42,7 @@ export function getTeamLastMatchDate(db, rawTeamName) {
   const normalizedTeamName = normalizeTeamName(rawTeamName);
   try {
     const variants = buildTeamVariants(normalizedTeamName);
+    const variantsLower = variants.map((team) => (team || '').toLowerCase().trim());
     const dateMeta = getMatchesDateMeta(db);
     const dateExpr = getMatchDateExpr(dateMeta);
     const nonEmptyWhere = getMatchDateNonEmptyWhere(dateMeta);
@@ -40,13 +51,13 @@ export function getTeamLastMatchDate(db, rawTeamName) {
       return null;
     }
 
-    const placeholders = variants.map(() => '?').join(',');
-    const params = [...variants, ...variants];
+    const placeholders = variantsLower.map(() => '?').join(',');
+    const params = [...variantsLower, ...variantsLower];
 
     const sql = `
       SELECT MAX(${dateExpr}) as last_match_date
       FROM Matches
-      WHERE (team_a IN (${placeholders}) OR team_b IN (${placeholders}))
+      WHERE (LOWER(team_a) IN (${placeholders}) OR LOWER(team_b) IN (${placeholders}))
       AND ${nonEmptyWhere}
     `;
 

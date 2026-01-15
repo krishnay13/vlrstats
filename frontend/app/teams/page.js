@@ -4,16 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Users, ArrowRight } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { fetchJson } from '@/app/lib/api'
 
 const REGION_ORDER = ['AMERICAS', 'EMEA', 'APAC', 'CHINA', 'UNKNOWN']
 const REGION_LABELS = {
@@ -31,9 +22,7 @@ export default function TeamsPage() {
   useEffect(() => {
     async function fetchTeams() {
       try {
-        const res = await fetch('/api/teams', { cache: 'no-store' })
-        if (!res.ok) throw new Error('Failed to fetch teams')
-        const data = await res.json()
+        const data = await fetchJson('/api/teams')
         setTeams(data)
       } catch (error) {
         console.error(error)
@@ -51,7 +40,7 @@ export default function TeamsPage() {
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="h-6 w-6 border-3 border-primary border-t-transparent rounded-full"
+            className="h-6 w-6 rounded-full border-2 border-emerald-300/70 border-t-transparent"
           />
         </div>
       </div>
@@ -69,14 +58,14 @@ export default function TeamsPage() {
   }, {})
 
   return (
-    <div className="container py-4 max-w-7xl">
+    <div className="container py-6 max-w-7xl">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-4"
       >
-        <h1 className="text-2xl font-bold tracking-tight mb-1">Teams</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight mb-1">Teams</h1>
+        <p className="text-sm text-white/60">
           Explore all Valorant esports teams organized by region
         </p>
       </motion.div>
@@ -91,59 +80,43 @@ export default function TeamsPage() {
               key={region}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="border rounded-lg overflow-hidden"
+              className="overflow-hidden rounded-2xl border border-white/10 bg-white/5"
             >
-              <div className="bg-muted/50 px-4 py-2 border-b">
-                <h2 className="text-lg font-semibold">{REGION_LABELS[region] || region}</h2>
+              <div className="border-b border-white/10 bg-white/5 px-4 py-3">
+                <h2 className="text-lg font-semibold text-white">{REGION_LABELS[region] || region}</h2>
               </div>
-              
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="h-10">
-                      <TableHead className="h-10 px-4 text-xs font-semibold">Team</TableHead>
-                      <TableHead className="h-10 px-4 text-xs font-semibold w-24"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {regionTeams.map((team, index) => (
-                      <motion.tr
-                        key={team.team_name}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.01 }}
-                        className="hover:bg-muted/50 h-12 border-b"
-                      >
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center space-x-3">
-                            <Avatar className="h-9 w-9">
-                              <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
-                                {team.team_name?.charAt(0) || 'T'}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-sm">{team.team_name}</span>
-                              {team.is_inactive && (
-                                <Badge variant="destructive" className="text-xs px-1.5 py-0">
-                                  Inactive
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <Link
-                            href={`/teams/${encodeURIComponent(team.team_name)}`}
-                            className="text-xs text-primary hover:underline font-medium flex items-center space-x-1"
-                          >
-                            <span>View Roster</span>
-                            <ArrowRight className="h-3 w-3" />
-                          </Link>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </TableBody>
-                </Table>
+
+              <div className="divide-y divide-white/5">
+                {regionTeams.map((team, index) => (
+                  <motion.div
+                    key={team.team_name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.01 }}
+                    className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-sm font-semibold text-emerald-100">
+                        {team.team_name?.charAt(0) || 'T'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white">{team.team_name}</span>
+                        {team.is_inactive && (
+                          <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      href={`/teams/${encodeURIComponent(team.team_name)}`}
+                      className="flex items-center gap-1 text-xs font-medium text-emerald-200 hover:text-emerald-100"
+                    >
+                      View Roster
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </motion.div>
+                ))}
               </div>
             </motion.div>
           )
@@ -154,9 +127,9 @@ export default function TeamsPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-center py-12"
+          className="py-12 text-center"
         >
-          <p className="text-muted-foreground">No teams found.</p>
+          <p className="text-white/60">No teams found.</p>
         </motion.div>
       )}
     </div>
