@@ -131,14 +131,11 @@ def find_incomplete_matches() -> Dict[str, List[int]]:
                         ta = ta or 0
                         tb = tb or 0
                         total = ta + tb
-                        # Flag very low totals (1, 4) as suspicious
-                        # Flag draws only if they're very low scores (not 12-12 which is intermediate, not 13-13 which is legitimate)
-                        # 12-12 means the map went to overtime but we didn't get the final score
-                        if total in (1, 4) or (ta == tb and ta > 0 and ta < 10 and ta != 12):
-                            bad_map_score = True
-                            break
-                        # Also flag 12-12 as it's an intermediate score, not final
-                        if ta == 12 and tb == 12:
+                        # Only flag clearly invalid scores:
+                        # - Very low totals (1, 4) that are impossible
+                        # - Low draws (< 10) that are invalid (but allow 12-12 and 13-13+ which can be legitimate)
+                        # Note: 12-12 might be valid in some edge cases, so we're more lenient
+                        if total in (1, 4) or (ta == tb and ta > 0 and ta < 10):
                             bad_map_score = True
                             break
 

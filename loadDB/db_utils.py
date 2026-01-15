@@ -100,10 +100,10 @@ def upsert_maps(conn: sqlite3.Connection, maps: list[tuple]) -> dict[tuple[int, 
         if not map_name or map_name == '':
             map_name = 'Unknown'
         
-        # Validate scores are within reasonable range
-        if ta_score is not None and (ta_score < 0 or ta_score > 13):
+        # Only validate non-negative scores (no upper limit - games can go 50+ rounds in overtime)
+        if ta_score is not None and ta_score < 0:
             ta_score = None
-        if tb_score is not None and (tb_score < 0 or tb_score > 13):
+        if tb_score is not None and tb_score < 0:
             tb_score = None
         
         cur.execute(

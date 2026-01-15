@@ -174,10 +174,11 @@ def _validate_match_data(match_row: tuple, maps_info: list, players_info: list) 
     # Validate scores are reasonable
     a_score, b_score = match_row[7], match_row[8]
     if a_score is not None and b_score is not None:
-        if a_score < 0 or b_score < 0 or a_score > 7 or b_score > 7:
+        # Allow up to 5 for BO5 matches, no upper limit for series scores
+        if a_score < 0 or b_score < 0:
             warnings.append(f"Unusual match scores: {a_score}-{b_score}")
-        if a_score == b_score and a_score > 0:
-            warnings.append(f"Match appears to be a draw: {a_score}-{b_score}")
+    if a_score == b_score and a_score > 0:
+        warnings.append(f"Match appears to be a draw: {a_score}-{b_score}")
     
     # Validate maps
     if not maps_info:
@@ -188,13 +189,13 @@ def _validate_match_data(match_row: tuple, maps_info: list, players_info: list) 
             if not map_name or map_name == 'Unknown':
                 warnings.append("Map with unknown name found")
             if ta_score is not None and tb_score is not None:
-                # Valid map scores: winner has >= 13, total between 13-30
+                # Valid map scores: winner has >= 13 (game rule), no upper limit
                 total = ta_score + tb_score
                 max_score = max(ta_score, tb_score)
                 min_score = min(ta_score, tb_score)
                 
-                # Check for invalid scores
-                if ta_score < 0 or tb_score < 0 or max_score < 13 or total < 13 or total > 30:
+                # Check for invalid scores (only basic validation - trust the scraped data)
+                if ta_score < 0 or tb_score < 0 or max_score < 13 or total < 13:
                     warnings.append(f"Unusual map scores: {map_name} {ta_score}-{tb_score}")
                 # Check for draws (but allow 13-13 which can happen in overtime)
                 elif ta_score == tb_score and ta_score > 0 and ta_score < 13:
@@ -303,7 +304,8 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         final_score_match = re.search(r'(?:final|result|score)[\s:]*(\d+)[:\-–—](\d+)', container_text, re.I)
         if final_score_match:
             score1, score2 = int(final_score_match.group(1)), int(final_score_match.group(2))
-            if 0 <= score1 <= 7 and 0 <= score2 <= 7:
+            # Allow up to 5 for BO5 matches (3-2 is max), but be lenient
+            if score1 >= 0 and score2 >= 0 and score1 <= 10 and score2 <= 10:
                 score_values.extend([score1, score2])
     
     # Remove duplicates while preserving order
@@ -333,7 +335,8 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
             if score_match:
                 try:
                     score1, score2 = int(score_match.group(1)), int(score_match.group(2))
-                    if 0 <= score1 <= 7 and 0 <= score2 <= 7:
+                    # Allow up to 5 for BO5 matches, but be lenient
+                    if score1 >= 0 and score2 >= 0 and score1 <= 10 and score2 <= 10:
                         a_score, b_score = score1, score2
                 except ValueError:
                     pass
@@ -347,7 +350,8 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
             if score_match:
                 try:
                     score1, score2 = int(score_match.group(1)), int(score_match.group(2))
-                    if 0 <= score1 <= 7 and 0 <= score2 <= 7:
+                    # Allow up to 5 for BO5 matches, but be lenient
+                    if score1 >= 0 and score2 >= 0 and score1 <= 10 and score2 <= 10:
                         a_score, b_score = score1, score2
                 except ValueError:
                     pass
@@ -490,32 +494,46 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
         a_map_score = b_map_score = None
         
         # Strategy 1: Extract final scores from the exact VLR.gg structure
-        # Scores are in <div class="score"> or <div class="score mod-win"> elements
-        # Inside <div class="team"> or <div class="team mod-right"> elements
-        # Within <div class="vm-stats-game-header">
-        # Search in both header and game_div to be safe
-        search_targets = []
-        if header:
-            search_targets.append(header)
-        search_targets.append(game_div)
-        
+        # Structure: .vm-stats-game-header > .team (left) and .team.mod-right (right)
+        # Each team div contains a .score div with the final map score
+        # Example: <div class="team"><div class="score mod-win">20</div></div>
+        #          <div class="team mod-right"><div class="score">18</div></div>
         score_elems = []
-        for target in search_targets:
-            # Use the exact selector that works in tests
-            score_elems = target.select('div.score, div[class*="score"]')
-            if score_elems:
-                break  # Found scores, stop searching
+        if header:
+            # Direct CSS selector approach: find .team containers, then .score within them
+            # This matches the exact HTML structure: .vm-stats-game-header > .team > .score
+            team_containers = header.select('div.team, div[class*="team"]')
+            
+            for team_container in team_containers:
+                # Skip team-name divs
+                classes = team_container.get('class', [])
+                if classes:
+                    class_str = ' '.join(classes) if isinstance(classes, list) else str(classes)
+                    if 'team-name' in class_str.lower():
+                        continue
+                
+                # Find score div within this team container
+                score_elem = team_container.select_one('div.score, div[class*="score"]')
+                if score_elem:
+                    score_elems.append(score_elem)
+            
+            # Fallback: direct selector if team-based approach didn't work
+            if not score_elems:
+                score_elems = header.select('div.score, div[class*="score"]')
         
         # Extract scores from found elements
-        if score_elems and len(score_elems) >= 2:
-            # Extract scores
+        # Structure: .vm-stats-game-header > .team (left) and .team.mod-right (right)
+        # Each team contains a .score div with the final score
+        if score_elems:
+            # Extract all scores with their team positions
             scores = []
             for score_elem in score_elems:
                 score_text = score_elem.get_text(strip=True)
                 try:
                     score_num = int(score_text)
-                    if 13 <= score_num <= 20:  # Valid map score range
-                        # Find parent team to determine left/right
+                    # Accept all non-negative scores (no upper limit - games can go 50+ rounds in overtime)
+                    if score_num >= 0:
+                        # Find parent team container to determine left/right
                         parent = score_elem.parent
                         is_right = False
                         for _ in range(5):
@@ -529,16 +547,20 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
                             parent = getattr(parent, 'parent', None)
                             if not parent:
                                 break
-                        scores.append((score_num, is_right))
+                        scores.append((score_num, is_right, score_elem))
                 except ValueError:
                     pass
             
-            # Assign scores - sort by position (left first, right second)
+            # We found scores from within the header, so they should be valid
+            # We want exactly 2 scores, one for each team
+            # Sort by position (left first, right second) and assign
             if len(scores) >= 2:
+                # Sort by position (left first, right second)
                 scores.sort(key=lambda x: x[1])  # False (left) before True (right)
                 a_map_score, b_map_score = scores[0][0], scores[1][0]
             elif len(scores) == 1:
-                score_num, is_right = scores[0]
+                # Only one score found - assign to appropriate team
+                score_num, is_right, _ = scores[0]
                 if is_right:
                     b_map_score = score_num
                 else:
@@ -568,8 +590,8 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
             score_match = re.search(r'(\d{1,2})\s*[:\-–—]\s*(\d{1,2})', header_clean)
             if score_match:
                 score1, score2 = int(score_match.group(1)), int(score_match.group(2))
-                # Allow 0-20 to catch overtime scores, but validate at least one >= 13
-                if 0 <= score1 <= 20 and 0 <= score2 <= 20 and (score1 >= 13 or score2 >= 13):
+                # Accept any non-negative scores, but validate at least one >= 13 (game rule)
+                if score1 >= 0 and score2 >= 0 and (score1 >= 13 or score2 >= 13):
                     # Try to determine which score belongs to which team by proximity
                     score1_str = score_match.group(1)
                     score2_str = score_match.group(2)
@@ -622,7 +644,7 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
                     score_text = score_elem.get_text(strip=True)
                     try:
                         score_num = int(score_text)
-                        if 13 <= score_num <= 20:
+                        if score_num >= 13:  # Only require winner >= 13, no upper limit
                             # Check if this is a final score (not part of time or other data)
                             parent_text = (score_elem.find_parent().get_text(' ', strip=True) if score_elem.find_parent() else '').lower()
                             # Skip if it's clearly part of time or other non-score element
@@ -729,22 +751,21 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
             # Strategy 3: Look for scores near team names (original fallback)
             if a_map_score is None or b_map_score is None:
                 # Find all numbers that could be map scores
-                # Valid map scores: winner has >= 13, loser has 0-12 (or higher in overtime)
-                # So we look for numbers 0-20 (allowing for overtime scenarios)
+                # No upper limit - games can go 50+ rounds in infinite overtime
                 numbers = []
-                for match in re.finditer(r'\b(\d{1,2})\b', header_text):
+                for match in re.finditer(r'\b(\d{1,3})\b', header_text):  # Allow up to 3 digits (e.g., 100+)
                     num = int(match.group(1))
-                    # Allow 0-20 to catch overtime scores (13-15, 14-16, etc.)
-                    if 0 <= num <= 20:
+                    # Accept any non-negative number (no upper limit)
+                    if num >= 0:
                         numbers.append((num, match.start()))
                 
                 if len(numbers) >= 2:
-                    # Filter to find valid map score pairs (at least one >= 13)
+                    # Filter to find valid map score pairs (at least one >= 13, no upper limit)
                     valid_pairs = []
                     for i, (num1, pos1) in enumerate(numbers):
                         for j, (num2, pos2) in enumerate(numbers[i+1:], i+1):
-                            # Valid map score: at least one team has >= 13, total reasonable
-                            if (num1 >= 13 or num2 >= 13) and (num1 + num2) >= 13 and (num1 + num2) <= 30:
+                            # Valid map score: at least one team has >= 13 (game rule), total >= 13, no upper limit
+                            if (num1 >= 13 or num2 >= 13) and (num1 + num2) >= 13:
                                 valid_pairs.append((num1, num2, pos1, pos2))
                     
                     if valid_pairs:
@@ -850,7 +871,7 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
                 if score_match:
                     score1, score2 = int(score_match.group(1)), int(score_match.group(2))
                     # Allow 0-20, validate at least one >= 13
-                    if 0 <= score1 <= 20 and 0 <= score2 <= 20 and (score1 >= 13 or score2 >= 13):
+                    if score1 >= 0 and score2 >= 0 and (score1 >= 13 or score2 >= 13):
                         a_map_score, b_map_score = score1, score2
 
         # Validate map scores - filter out invalid scores
@@ -863,20 +884,17 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
             max_score = max(a_map_score, b_map_score)
             min_score = min(a_map_score, b_map_score)
             
-            # Filter out 12-12 (intermediate overtime score, not final)
-            if a_map_score == 12 and b_map_score == 12:
-                # This is an intermediate score during overtime, not the final
-                # The final score will be higher - set to None so we can try other strategies
-                a_map_score, b_map_score = None, None
-            # Valid map must have:
-            # - At least one team with >= 13 rounds (winner)
-            # - Total rounds between 13 and 30 (allowing for overtime: 13-0 to 15-13, etc.)
-            # - Loser can't have more than winner (unless it's a draw, which we filter)
-            elif max_score < 13 or total < 13 or total > 30:
-                # These are likely round scores or invalid data - set to None
+            # Minimal validation: only require winner >= 13 (game rule)
+            # No upper limits - games can go to 50+ rounds in infinite overtime
+            # Only filter out clearly invalid scores:
+            # - Winner must have >= 13 (game rule)
+            # - Total must be >= 13 (minimum for a completed map)
+            # - No negative scores
+            if max_score < 13 or total < 13 or a_map_score < 0 or b_map_score < 0:
+                # These are likely invalid - set to None
                 a_map_score, b_map_score = None, None
             elif max_score == min_score and max_score < 13:
-                # Draw with low scores (like 4-4, 6-6) - invalid
+                # Draw with low scores (like 4-4, 6-6) - invalid (but allow 13-13+ which can happen)
                 a_map_score, b_map_score = None, None
         
         # Always insert map, even if scores are missing (for consistency)
@@ -1088,10 +1106,10 @@ async def scrape_match(match_id_or_url: str | int) -> tuple[tuple, list[tuple], 
                             score_match = re.search(r'(\d{1,2})\s*[:\-–—]\s*(\d{1,2})', header_text)
                             if score_match:
                                 ta_map, tb_map = int(score_match.group(1)), int(score_match.group(2))
-                                # Validate: must have at least one team with >= 13, total between 13-30 (allowing overtime)
+                                # Validate: must have at least one team with >= 13 (game rule), no upper limit
                                 total = ta_map + tb_map
                                 max_score = max(ta_map, tb_map)
-                                if max_score >= 13 and 13 <= total <= 30:
+                                if max_score >= 13 and total >= 13:
                                     maps_info.append((mid, missing_gid, map_name, ta_map, tb_map))
                                     if ta_map > tb_map:
                                         a_w += 1
