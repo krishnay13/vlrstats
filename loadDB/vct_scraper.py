@@ -5,8 +5,93 @@ import re
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from .tournament_scraper import fetch_html, extract_event_id_from_url
+
+
+# Expected match counts for key VCT events based on manual ground truth.
+# These are used for auditing but the scraper logic does not depend on them.
+# Keys are (year, phase, region) where:
+#   - phase ∈ {"kickoff", "stage1", "stage2", "masters", "champs"}
+#   - region ∈ {"americas", "emea", "pacific", "china", "international"}
+VCT_EVENT_EXPECTATIONS: Dict[Tuple[int, str, str], Dict[str, int]] = {
+    # 2025 domestic leagues
+    (2025, "stage2", "americas"): {"expected_matches": 43, "expected_showmatches": 1},
+    (2025, "stage2", "emea"): {"expected_matches": 43, "expected_showmatches": 1},
+    (2025, "stage2", "pacific"): {"expected_matches": 43, "expected_showmatches": 1},
+    (2025, "stage2", "china"): {"expected_matches": 43, "expected_showmatches": 1},
+    (2025, "stage1", "americas"): {"expected_matches": 42, "expected_showmatches": 0},
+    (2025, "stage1", "emea"): {"expected_matches": 42, "expected_showmatches": 0},
+    (2025, "stage1", "pacific"): {"expected_matches": 42, "expected_showmatches": 0},
+    (2025, "stage1", "china"): {"expected_matches": 42, "expected_showmatches": 0},
+    (2025, "kickoff", "americas"): {"expected_matches": 22, "expected_showmatches": 0},
+    (2025, "kickoff", "emea"): {"expected_matches": 22, "expected_showmatches": 0},
+    (2025, "kickoff", "pacific"): {"expected_matches": 22, "expected_showmatches": 0},
+    (2025, "kickoff", "china"): {"expected_matches": 22, "expected_showmatches": 0},
+    # 2024 domestic leagues
+    (2024, "stage2", "americas"): {"expected_matches": 33, "expected_showmatches": 0},
+    (2024, "stage2", "emea"): {"expected_matches": 33, "expected_showmatches": 0},
+    (2024, "stage2", "pacific"): {"expected_matches": 33, "expected_showmatches": 0},
+    (2024, "stage2", "china"): {"expected_matches": 33, "expected_showmatches": 0},
+    (2024, "stage1", "americas"): {"expected_matches": 38, "expected_showmatches": 0},
+    (2024, "stage1", "emea"): {"expected_matches": 38, "expected_showmatches": 0},
+    (2024, "stage1", "pacific"): {"expected_matches": 38, "expected_showmatches": 0},
+    (2024, "stage1", "china"): {"expected_matches": 38, "expected_showmatches": 0},
+    (2024, "kickoff", "americas"): {"expected_matches": 19, "expected_showmatches": 0},
+    (2024, "kickoff", "emea"): {"expected_matches": 19, "expected_showmatches": 0},
+    (2024, "kickoff", "pacific"): {"expected_matches": 19, "expected_showmatches": 0},
+    (2024, "kickoff", "china"): {"expected_matches": 19, "expected_showmatches": 0},
+    # International events
+    (2025, "masters", "international"): {"expected_matches": 25, "expected_showmatches": 1},  # Masters Toronto
+    (2025, "champs", "international"): {"expected_matches": 34, "expected_showmatches": 0},   # Champs 2025
+    # 2024 Masters / Champs – counts not provided explicitly by user; we still audit by diff vs DB.
+    # We'll leave expectations empty for these but still include them in reports.
+}
+
+
+def classify_vct_tournament(name: str, year: int) -> Optional[Dict[str, str]]:
+    """
+    Classify a VCT tournament into phase/region buckets based on its name.
+
+    This is intentionally heuristic but good enough for auditing 2024/2025 events.
+    """
+    if not name:
+        return None
+
+    lower = name.lower()
+
+    # Phase
+    phase: Optional[str] = None
+    if "kickoff" in lower:
+        phase = "kickoff"
+    elif "stage 1" in lower or "stage one" in lower:
+        phase = "stage1"
+    elif "stage 2" in lower or "stage two" in lower:
+        phase = "stage2"
+    elif "masters" in lower:
+        phase = "masters"
+    elif "champions" in lower or "champs" in lower:
+        phase = "champs"
+
+    if not phase:
+        return None
+
+    # Region (or international)
+    region = "international"
+    if "americas" in lower:
+        region = "americas"
+    elif "emea" in lower:
+        region = "emea"
+    elif "pacific" in lower:
+        region = "pacific"
+    elif "china" in lower:
+        region = "china"
+
+    return {
+        "year": str(year),
+        "phase": phase,
+        "region": region,
+    }
 
 
 async def scrape_vct_tournaments(vct_url: str) -> List[Dict[str, str]]:
@@ -130,6 +215,66 @@ async def scrape_vct_tournaments(vct_url: str) -> List[Dict[str, str]]:
             unique_tournaments.append(t)
     
     return unique_tournaments
+
+
+async def get_vct_target_events() -> List[Dict[str, object]]:
+    """
+    Enumerate key VCT 2024/2025 events we care about for auditing/backfill.
+
+    Returns a list of dicts with:
+      - name: Tournament name
+      - url: Event URL
+      - event_id: VLR event ID
+      - year: 2024 or 2025
+      - phase: kickoff/stage1/stage2/masters/champs
+      - region: americas/emea/pacific/china/international
+      - expected_matches / expected_showmatches (if known, else None)
+    """
+    targets: List[Dict[str, object]] = []
+
+    for year, vct_url in [(2024, "https://www.vlr.gg/vct-2024"), (2025, "https://www.vlr.gg/vct-2025")]:
+        print(f"Discovering VCT {year} tournaments from {vct_url}...")
+        tournaments = await scrape_vct_tournaments(vct_url)
+        print(f"  Found {len(tournaments)} tournaments in VCT {year}")
+
+        for t in tournaments:
+            cls = classify_vct_tournament(t["name"], year)
+            if not cls:
+                continue
+
+            phase = cls["phase"]
+            region = cls["region"]
+
+            # Only keep events that are explicitly mentioned in the user's spec:
+            # - Kickoff, Stage1, Stage2 for all four regions
+            # - Masters (Bangkok, Shanghai, Madrid, Toronto)
+            # - Champs (2024, 2025)
+            if phase in {"kickoff", "stage1", "stage2"} and region in {"americas", "emea", "pacific", "china"}:
+                pass
+            elif phase == "masters" and any(city in t["name"].lower() for city in ["bangkok", "shanghai", "madrid", "toronto"]):
+                region = "international"
+            elif phase == "champs" or "champions" in t["name"].lower():
+                region = "international"
+            else:
+                continue
+
+            exp = VCT_EVENT_EXPECTATIONS.get((year, phase, region))
+            targets.append(
+                {
+                    "name": t["name"],
+                    "url": t["url"],
+                    "event_id": t["event_id"],
+                    "year": year,
+                    "phase": phase,
+                    "region": region,
+                    "expected_matches": exp["expected_matches"] if exp else None,
+                    "expected_showmatches": exp["expected_showmatches"] if exp else None,
+                }
+            )
+
+    # Sort for nicer output
+    targets.sort(key=lambda e: (e["year"], e["phase"], e["region"], e["name"]))
+    return targets
 
 
 def detect_showmatch(match_name: str, tournament_name: str = '') -> bool:

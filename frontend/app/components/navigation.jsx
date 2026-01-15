@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Sparkles, Users, User, Calendar } from 'lucide-react'
+import { Sparkles, Users, User, Calendar, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/matches', label: 'Matches', icon: Calendar },
   { href: '/teams', label: 'Teams', icon: Users },
   { href: '/players', label: 'Players', icon: User },
+  { href: '/rankings', label: 'Rankings', icon: Trophy },
 ]
 
 export default function Navigation() {

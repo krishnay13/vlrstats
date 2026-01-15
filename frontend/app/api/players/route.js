@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import db from '@/app/lib/db.js';
-import { isOlderThanSixMonths } from '@/app/lib/region-utils.js';
+import { isOlderThanSixMonths, inferTeamRegion } from '@/app/lib/region-utils.js';
 import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getPlayerLastMatchDate, getPlayerTeams } from '@/app/lib/db/activity.js';
 import { getTeamLogoUrl } from '@/app/lib/logos.js';
@@ -52,17 +52,25 @@ export async function GET() {
       // Filter out showmatch teams
       const validTeams = allTeams.filter(t => !isShowmatchTeam(t.team_name));
       
-      if (validTeams.length === 0) {
-        return null;
-      }
+      // Determine most recent valid team (if any)
+      const mostRecentTeam = validTeams[0] || null; // getPlayerTeams already sorts by date DESC
       
-      // Most recent team is the first one (sorted by date DESC)
-      const mostRecentTeam = validTeams[0];
-      
-      // Get last match date for inactivity check
-      const lastMatchDate = mostRecentTeam.last_match_date || 
+      // Get last match date for inactivity check (fallback to global last match if no valid teams)
+      const lastMatchDate = (mostRecentTeam && mostRecentTeam.last_match_date) || 
         getPlayerLastMatchDate(db, player.player_name);
       const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
+
+      // If no valid teams remain after filtering (e.g., only showmatch teams), treat as Free Agent
+      if (!mostRecentTeam) {
+        return {
+          player_name: player.player_name,
+          team_name: null,
+          all_teams: [],
+          is_inactive: isInactive,
+          team_logo: null,
+          region: 'UNKNOWN',
+        };
+      }
       
       return {
         player_name: player.player_name,
@@ -70,17 +78,8 @@ export async function GET() {
         all_teams: validTeams.map(t => t.team_name), // All teams for backend
         is_inactive: isInactive,
         team_logo: getTeamLogoUrl(mostRecentTeam.team_name, 'small'),
+        region: inferTeamRegion(db, mostRecentTeam.team_name), // Add region for sorting
       };
-    }).filter(p => p !== null);
-    
-    // Sort: active players first (by name), then inactive players (by name)
-    players.sort((a, b) => {
-      // Active players first
-      if (a.is_inactive !== b.is_inactive) {
-        return a.is_inactive ? 1 : -1;
-      }
-      // Then alphabetically
-      return a.player_name.localeCompare(b.player_name);
     });
     
     return NextResponse.json(players);

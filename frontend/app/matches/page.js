@@ -32,12 +32,42 @@ const formatMatchDate = (match) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Normalize tournament name to base event name (removes stage-specific suffixes)
+const normalizeEventName = (tournament) => {
+  if (!tournament) return tournament
+  // Remove common stage suffixes that appear in tournament names
+  let normalized = tournament
+    .replace(/\s*-\s*(playoffs?|group stage|swiss|bracket|finals?)\s*$/i, '')
+    .replace(/\s*\(playoffs?|group stage|swiss|bracket|finals?\)\s*$/i, '')
+    .trim()
+  return normalized
+}
+
 const getRegionalStage = (tournament) => {
   const tLower = (tournament || '').toLowerCase()
   if (tLower.includes('kickoff')) return 'Kickoff'
-  if (tLower.includes('stage 1')) return 'Stage 1'
-  if (tLower.includes('stage 2')) return 'Stage 2'
+  if (tLower.includes('stage 1') || tLower.includes('stage1')) return 'Stage 1'
+  if (tLower.includes('stage 2') || tLower.includes('stage2')) return 'Stage 2'
   return null
+}
+
+// Check if tournament is a regional league event
+const isRegionalTournament = (tournament, region) => {
+  if (!tournament || !region || region === 'UNKNOWN') return false
+  const tLower = tournament.toLowerCase()
+  const rLower = region.toLowerCase()
+  
+  // Check if tournament name contains region
+  if (tLower.includes(rLower)) return true
+  
+  // Check for regional stage patterns
+  const hasStage = tLower.includes('kickoff') || tLower.includes('stage 1') || tLower.includes('stage 2') || 
+                   tLower.includes('stage1') || tLower.includes('stage2')
+  
+  // Check for VCT/Champions Tour patterns
+  const isVCT = tLower.includes('vct') || tLower.includes('champions tour') || tLower.includes('valorant champions tour')
+  
+  return hasStage && isVCT
 }
 
 const isPlayoffsMatch = (match) => {
@@ -215,35 +245,129 @@ export default function MatchesPage() {
     const mastersEvents = {}
     const championsEvents = {}
 
+    // Group events by normalized name
+    const eventGroups = new Map()
+    
     yearMatches.forEach((match) => {
       const tLower = (match.tournament || '').toLowerCase()
-      const isChampionsMain = tLower.includes('champions') && !tLower.includes('champions tour')
-      if (tLower.includes('masters')) {
-        if (!mastersEvents[match.tournament]) {
-          mastersEvents[match.tournament] = {
+      const matchNameLower = (match.match_name || '').toLowerCase()
+      const stageLower = (match.stage || '').toLowerCase()
+      
+      // Check for Champions (main event, not Champions Tour)
+      const isChampionsMain = (tLower.includes('champions') && !tLower.includes('champions tour')) ||
+                              (matchNameLower.includes('champions') && !matchNameLower.includes('champions tour'))
+      
+      // Check for Masters
+      const isMasters = tLower.includes('masters') || matchNameLower.includes('masters')
+      
+      // Check for regional VCT events (Champions Tour)
+      const isRegionalVCT = (tLower.includes('vct') || tLower.includes('champions tour') || 
+                             matchNameLower.includes('vct') || matchNameLower.includes('champions tour')) &&
+                            !isChampionsMain && !isMasters
+      
+      if (isMasters || isChampionsMain) {
+        // Normalize event name to group playoffs and group stage together
+        const eventName = normalizeEventName(match.tournament)
+        const eventKey = isMasters ? `masters-${eventName}` : `champions-${eventName}`
+        
+        if (!eventGroups.has(eventKey)) {
+          eventGroups.set(eventKey, {
+            type: isMasters ? 'masters' : 'champions',
+            name: eventName,
+            originalNames: new Set([match.tournament]),
             logo: match.event_logo,
             group: [],
             playoffs: [],
+            all: [],
+          })
+        }
+        
+        const event = eventGroups.get(eventKey)
+        event.originalNames.add(match.tournament)
+        event.all.push(match)
+        
+        if (isMasters) {
+          const bucket = isPlayoffsMatch(match) ? 'playoffs' : 'group'
+          event[bucket].push(match)
+        } else {
+          // For Champions, separate by stage
+          if (isPlayoffsMatch(match)) {
+            event.playoffs.push(match)
+          } else {
+            event.group.push(match)
           }
         }
-        const bucket = isPlayoffsMatch(match) ? 'playoffs' : 'group'
-        mastersEvents[match.tournament][bucket].push(match)
         return
       }
-      if (isChampionsMain) {
-        if (!championsEvents[match.tournament]) {
-          championsEvents[match.tournament] = {
-            logo: match.event_logo,
-            matches: [],
+      
+      // Handle regional tournaments (VCT/Champions Tour)
+      if (isRegionalVCT || (match.region && REGION_ORDER.includes(match.region))) {
+        // Determine region - prefer match.region, fallback to inferring from tournament/match_name
+        let region = match.region
+        if (!region || region === 'UNKNOWN') {
+          // Try to infer region from tournament or match name
+          if (tLower.includes('americas') || matchNameLower.includes('americas')) {
+            region = 'AMERICAS'
+          } else if (tLower.includes('emea') || matchNameLower.includes('emea')) {
+            region = 'EMEA'
+          } else if (tLower.includes('apac') || tLower.includes('pacific') || matchNameLower.includes('apac') || matchNameLower.includes('pacific')) {
+            region = 'APAC'
+          } else if (tLower.includes('china') || matchNameLower.includes('china')) {
+            region = 'CHINA'
+          } else {
+            // Default to match.region even if UNKNOWN
+            region = match.region || 'UNKNOWN'
           }
         }
-        championsEvents[match.tournament].matches.push(match)
+        
+        if (region && REGION_ORDER.includes(region)) {
+          // Try to extract stage from tournament name, match name, or stage field
+          let stage = getRegionalStage(match.tournament)
+          if (!stage) {
+            stage = getRegionalStage(match.match_name)
+          }
+          if (!stage) {
+            stage = getRegionalStage(match.stage)
+          }
+          
+          if (stage) {
+            regionalBuckets[region][stage].push(match)
+          } else {
+            // If no stage detected, try to infer or default
+            // Check if it's a VCT event that should have a stage
+            if (isRegionalVCT) {
+              // Default to Stage 1 if unclear, but log for debugging
+              regionalBuckets[region]['Stage 1'].push(match)
+            } else {
+              // Non-VCT regional event, still add to Stage 1 as fallback
+              regionalBuckets[region]['Stage 1'].push(match)
+            }
+          }
+        }
         return
       }
-      if (REGION_ORDER.includes(match.region)) {
-        const stage = getRegionalStage(match.tournament)
-        if (stage) {
-          regionalBuckets[match.region][stage].push(match)
+      
+      // Fallback: if we have a region but didn't categorize above, add to regional buckets
+      if (match.region && REGION_ORDER.includes(match.region)) {
+        const stage = getRegionalStage(match.tournament) || getRegionalStage(match.match_name) || getRegionalStage(match.stage) || 'Stage 1'
+        regionalBuckets[match.region][stage].push(match)
+      }
+    })
+    
+    // Convert event groups to the expected format
+    eventGroups.forEach((event, key) => {
+      if (event.type === 'masters') {
+        mastersEvents[event.name] = {
+          logo: event.logo,
+          group: event.group,
+          playoffs: event.playoffs,
+        }
+      } else {
+        championsEvents[event.name] = {
+          logo: event.logo,
+          matches: event.all,
+          group: event.group,
+          playoffs: event.playoffs,
         }
       }
     })
@@ -346,9 +470,17 @@ export default function MatchesPage() {
             {Object.entries(championsEvents).map(([eventName, event]) => {
               const key = `champions-${eventName}`
               const isExpanded = expandedEvents[key]
-              const matches = [...event.matches].sort(
+              const groupMatches = [...(event.group || [])].sort(
                 (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
               )
+              const playoffMatches = [...(event.playoffs || [])].sort(
+                (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
+              )
+              const allMatches = [...(event.matches || [])].sort(
+                (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
+              )
+              const totalMatches = groupMatches.length + playoffMatches.length || allMatches.length
+              
               return (
                 <motion.div
                   key={eventName}
@@ -372,17 +504,36 @@ export default function MatchesPage() {
                       <div className="text-left">
                         <h3 className="text-lg font-semibold text-white">{eventName}</h3>
                         <p className="mt-0.5 text-xs text-white/50">
-                          {matches.length} match{matches.length !== 1 ? 'es' : ''}
+                          {totalMatches} match{totalMatches !== 1 ? 'es' : ''}
                         </p>
                       </div>
                     </div>
                     <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/70">
-                      {matches.length}
+                      {totalMatches}
                     </span>
                   </button>
                   {isExpanded && (
-                    <div className="px-6 pb-6 pt-4">
-                      <MatchTable matches={matches} />
+                    <div className="space-y-6 px-6 pb-6 pt-4">
+                      {groupMatches.length > 0 && (
+                        <div>
+                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group Stage</h4>
+                          <MatchTable matches={groupMatches} />
+                        </div>
+                      )}
+                      {playoffMatches.length > 0 && (
+                        <div>
+                          <h4 className="mb-3 text-sm font-semibold text-white/70">Playoffs</h4>
+                          <MatchTable matches={playoffMatches} />
+                        </div>
+                      )}
+                      {groupMatches.length === 0 && playoffMatches.length === 0 && allMatches.length > 0 && (
+                        <div>
+                          <MatchTable matches={allMatches} />
+                        </div>
+                      )}
+                      {groupMatches.length === 0 && playoffMatches.length === 0 && allMatches.length === 0 && (
+                        <p className="text-sm text-white/50">No matches available.</p>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -400,6 +551,11 @@ export default function MatchesPage() {
               if (regionMatches.length === 0) return null
               const regionLogo = regionMatches[0]?.event_logo
 
+              // Determine if any stage is expanded for this region
+              const expandedStageForRegion = REGIONAL_STAGES.find(
+                (stage) => expandedEvents[`${region}-${stage}`]
+              )
+
               return (
                 <motion.div
                   key={region}
@@ -409,36 +565,47 @@ export default function MatchesPage() {
                 >
                   <div className="flex items-center gap-3 border-b border-white/10 pb-4">
                     {regionLogo ? (
-                      <img src={regionLogo} alt={`${REGION_LABELS[region]} logo`} className="h-8 w-8 bg-white/5 object-contain" />
+                      <img
+                        src={regionLogo}
+                        alt={`${REGION_LABELS[region]} logo`}
+                        className="h-8 w-8 bg-white/5 object-contain"
+                      />
                     ) : (
                       <Calendar className="h-5 w-5 text-white/60" />
                     )}
-                    <h3 className="text-lg font-semibold text-white">{REGION_LABELS[region] || region}</h3>
+                    <h3 className="text-lg font-semibold text-white">
+                      {REGION_LABELS[region] || region}
+                    </h3>
                   </div>
-                  <div className="mt-5 grid gap-4 md:grid-cols-3">
-                    {REGIONAL_STAGES.map((stage) => {
-                      const matches = stages[stage]
-                      const key = `${region}-${stage}`
-                      const isExpanded = expandedEvents[key]
-                      const sortedMatches = [...matches].sort(
-                        (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
-                      )
 
-                      return (
-                        <div key={stage} className="rounded-2xl border border-white/10 bg-black/20">
-                          <button
-                            onClick={() => toggleEvent(key)}
-                            className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
-                          >
-                            <div className="text-left">
-                              <p className="text-sm font-semibold text-white">{stage}</p>
-                              <p className="text-xs text-white/50">{matches.length} matches</p>
-                            </div>
-                            <ChevronRight
-                              className={`h-4 w-4 text-white/60 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                            />
-                          </button>
-                          {isExpanded && (
+                  {/* When a stage is expanded for this region, show a single full-width panel */}
+                  {expandedStageForRegion ? (
+                    <div className="mt-5">
+                      {(() => {
+                        const stage = expandedStageForRegion
+                        const matches = stages[stage]
+                        const key = `${region}-${stage}`
+                        const sortedMatches = [...matches].sort(
+                          (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
+                        )
+
+                        return (
+                          <div className="rounded-2xl border border-white/10 bg-black/20">
+                            <button
+                              onClick={() =>
+                                setExpandedEvents((prev) => ({
+                                  ...prev,
+                                  [key]: false,
+                                }))
+                              }
+                              className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                            >
+                              <div className="text-left">
+                                <p className="text-sm font-semibold text-white">{stage}</p>
+                                <p className="text-xs text-white/50">{matches.length} matches</p>
+                              </div>
+                              <ChevronRight className="h-4 w-4 rotate-90 text-white/60 transition-transform" />
+                            </button>
                             <div className="p-4">
                               {sortedMatches.length > 0 ? (
                                 <MatchTable matches={sortedMatches} />
@@ -446,11 +613,46 @@ export default function MatchesPage() {
                                 <p className="text-sm text-white/50">No matches yet.</p>
                               )}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid gap-4 md:grid-cols-3">
+                      {REGIONAL_STAGES.map((stage) => {
+                        const matches = stages[stage]
+                        const key = `${region}-${stage}`
+
+                        return (
+                          <div
+                            key={stage}
+                            className="rounded-2xl border border-white/10 bg-black/20"
+                          >
+                            <button
+                              onClick={() =>
+                                setExpandedEvents((prev) => {
+                                  const next = { ...prev }
+                                  // Collapse any other stage for this region
+                                  REGIONAL_STAGES.forEach((s) => {
+                                    next[`${region}-${s}`] = false
+                                  })
+                                  next[key] = true
+                                  return next
+                                })
+                              }
+                              className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                            >
+                              <div className="text-left">
+                                <p className="text-sm font-semibold text-white">{stage}</p>
+                                <p className="text-xs text-white/50">{matches.length} matches</p>
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-white/60 transition-transform" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </motion.div>
               )
             })}

@@ -251,15 +251,37 @@ def extract_tournament_info(soup: BeautifulSoup, url: str) -> Tuple[str, str, st
     if parts:
         tournament = parts[0].strip()
     
-    # Extract stage
+    # Extract stage (primary: from parsed match_name)
     if len(parts) >= 2:
         for part in parts[1:-1] if len(parts) > 2 else parts[1:]:
-            stage_match = re.search(r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff|Regular Season)', part, re.IGNORECASE)
+            stage_match = re.search(
+                r'(Main Event|Group Stage|Swiss Stage|Playoffs|Knockout Stage|Stage\s*[12]|Kickoff|Regular Season)',
+                part,
+                re.IGNORECASE,
+            )
             if stage_match:
                 stage = stage_match.group(1)
                 break
             if part and not stage:
                 stage = part
+
+    # Fallback: if stage is still empty, try the dedicated header element
+    # Example from VLR:
+    #   <div class="match-header-event-series">
+    #       Group Stage: Winner's (A)
+    #   </div>
+    # We generally want the main stage ("Group Stage"), but will accept the full
+    # string if parsing fails. This is ONLY used when primary parsing above
+    # did not yield anything.
+    if not stage or not stage.strip():
+        series_el = soup.select_one('.match-header-event-series')
+        if series_el:
+            series_text = series_el.get_text(' ', strip=True)
+            if series_text:
+                if ':' in series_text:
+                    stage = series_text.split(':', 1)[0].strip() or series_text.strip()
+                else:
+                    stage = series_text.strip()
     
     # Fallback: try to get tournament from breadcrumbs
     if not tournament or len(tournament) < 3:

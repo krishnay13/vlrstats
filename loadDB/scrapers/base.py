@@ -19,9 +19,13 @@ def match_id_from_url(url: str) -> Optional[int]:
         url: URL containing a match ID (e.g., "https://www.vlr.gg/427991/match-name")
     
     Returns:
-        Match ID as integer if found, None otherwise
+        Match ID as integer if found, None otherwise.
+
+    Supports URLs with or without a trailing slash, e.g.:
+      - https://www.vlr.gg/427991/match-name
+      - https://www.vlr.gg/427991
     """
-    m = re.search(r"/([0-9]+)/", url)
+    m = re.search(r"/([0-9]+)(?:/|$)", url)
     return int(m.group(1)) if m else None
 
 

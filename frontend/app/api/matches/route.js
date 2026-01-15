@@ -7,6 +7,15 @@ import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getMatchesDateMeta, getMatchDateExpr } from '@/app/lib/db/schema.js';
 import { getEventLogoUrl, getTeamLogoUrl } from '@/app/lib/logos.js';
 
+// Normalize tournament name to base event name (removes stage-specific suffixes)
+const normalizeEventName = (name) => {
+  if (!name) return name;
+  return name
+    .replace(/\s*-\s*(playoffs?|group stage|swiss|bracket|finals?)\s*$/i, '')
+    .replace(/\s*\(playoffs?|group stage|swiss|bracket|finals?\)\s*$/i, '')
+    .trim();
+};
+
 export async function GET() {
   try {
     // Check which date columns exist and build a generic sort expression
@@ -40,7 +49,7 @@ export async function GET() {
         const matchName = match.match_name || '';
         const matchNameLower = matchName.toLowerCase();
         const tournamentLower = tournament.toLowerCase();
-        
+
         // Skip explicit showmatches / all-star style events
         if (
           stage.toLowerCase().includes('showmatch') ||
@@ -50,14 +59,29 @@ export async function GET() {
         ) {
           return null;
         }
-        
-        // Extract region from match_name
-        const region = getRegionFromMatchName(matchName);
-        
-        // Extract year from tournament
-        const yearMatch = tournament.match(/\b(202[0-9]|203[0-9])\b/);
+
+        // Extract region from match_name, tournament, or stage
+        let region = getRegionFromMatchName(matchName);
+        if (region === 'UNKNOWN') {
+          // Try to get region from tournament name (reuse tournamentLower already defined above)
+          if (tournamentLower.includes('americas')) {
+            region = 'AMERICAS';
+          } else if (tournamentLower.includes('emea')) {
+            region = 'EMEA';
+          } else if (tournamentLower.includes('apac') || tournamentLower.includes('pacific')) {
+            region = 'APAC';
+          } else if (tournamentLower.includes('china')) {
+            region = 'CHINA';
+          }
+        }
+
+        // Extract year from tournament or match_name
+        let yearMatch = tournament.match(/\b(202[0-9]|203[0-9])\b/);
+        if (!yearMatch) {
+          yearMatch = matchName.match(/\b(202[0-9]|203[0-9])\b/);
+        }
         const year = yearMatch ? parseInt(yearMatch[1]) : 0;
-        
+
         // Create group key for frontend:
         // - Within a year, we want: Kickoff -> Stage 1 -> Stage 2 -> Masters -> Champions
         // - Do NOT split Playoffs / Swiss / Group Stage into separate events.
@@ -66,21 +90,23 @@ export async function GET() {
         // and stage is usually "Swiss", "Playoffs", etc. We drop the sub-stage from the key
         // so that all sub-stages are grouped under the same event.
         //
-        // For global events like Masters / Champions, we group by tournament name only.
+        // For global events like Masters / Champions, we group by normalized tournament name.
         let groupKey;
-        const tLower = tournament.toLowerCase();
-        const isChampionsMain = tLower.includes('champions') && !tLower.includes('champions tour');
-        const isMasters = tLower.includes('masters');
+        // Reuse tournamentLower and matchNameLower already defined above
+        const isChampionsMain = (tournamentLower.includes('champions') && !tournamentLower.includes('champions tour')) ||
+                                (matchNameLower.includes('champions') && !matchNameLower.includes('champions tour'));
+        const isMasters = tournamentLower.includes('masters') || matchNameLower.includes('masters');
 
         if (isChampionsMain || isMasters) {
-          // Champions and Masters tournaments: single global event per tournament
-          groupKey = tournament;
+          // Champions and Masters tournaments: normalize name to group playoffs and group stage
+          groupKey = normalizeEventName(tournament);
         } else {
-          // VCT / regional leagues: group by tournament + region only
+          // VCT / regional leagues: group by normalized tournament + region
+          const normalizedTournament = normalizeEventName(tournament);
           if (region !== 'UNKNOWN') {
-            groupKey = `${tournament} - ${region}`;
+            groupKey = `${normalizedTournament} - ${region}`;
           } else {
-            groupKey = tournament;
+            groupKey = normalizedTournament;
           }
         }
         
