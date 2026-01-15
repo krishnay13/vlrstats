@@ -156,7 +156,27 @@ export default function MatchDetailsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight mb-1">
-              {match.team1_name} vs {match.team2_name}
+              <span className="inline-flex items-center gap-2">
+                {match.team1_logo ? (
+                  <img
+                    src={match.team1_logo}
+                    alt={`${match.team1_name} logo`}
+                    className="h-6 w-6 bg-white/5 object-contain"
+                  />
+                ) : null}
+                {match.team1_name}
+              </span>
+              <span className="mx-2 text-white/40">vs</span>
+              <span className="inline-flex items-center gap-2">
+                {match.team2_logo ? (
+                  <img
+                    src={match.team2_logo}
+                    alt={`${match.team2_name} logo`}
+                    className="h-6 w-6 bg-white/5 object-contain"
+                  />
+                ) : null}
+                {match.team2_name}
+              </span>
             </h1>
             <p className="text-sm text-white/60">
               Match{" "}
@@ -197,6 +217,13 @@ export default function MatchDetailsPage() {
                 winner === 1 ? 'border border-emerald-300/40 bg-emerald-500/10' : 'border border-white/10 bg-white/5'
               }`}
             >
+              {match.team1_logo ? (
+                <img
+                  src={match.team1_logo}
+                  alt={`${match.team1_name} logo`}
+                  className="mx-auto mb-2 h-8 w-8 bg-white/5 object-contain"
+                />
+              ) : null}
               <div className={`mb-1 text-3xl font-semibold ${winner === 1 ? 'text-emerald-200' : 'text-white'}`}>
                 {match.team1_score}
               </div>
@@ -210,6 +237,13 @@ export default function MatchDetailsPage() {
                 winner === 2 ? 'border border-emerald-300/40 bg-emerald-500/10' : 'border border-white/10 bg-white/5'
               }`}
             >
+              {match.team2_logo ? (
+                <img
+                  src={match.team2_logo}
+                  alt={`${match.team2_name} logo`}
+                  className="mx-auto mb-2 h-8 w-8 bg-white/5 object-contain"
+                />
+              ) : null}
               <div className={`mb-1 text-3xl font-semibold ${winner === 2 ? 'text-emerald-200' : 'text-white'}`}>
                 {match.team2_score}
               </div>

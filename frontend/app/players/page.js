@@ -74,7 +74,15 @@ export default function PlayersPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-white/60">
-                <Users className="h-3.5 w-3.5 text-white/40" />
+                {player.team_logo ? (
+                  <img
+                    src={player.team_logo}
+                    alt={`${player.team_name} logo`}
+                    className="h-4 w-4 bg-white/5 object-contain"
+                  />
+                ) : (
+                  <Users className="h-3.5 w-3.5 text-white/40" />
+                )}
                 <span>{player.team_name || 'Free Agent'}</span>
               </div>
             </motion.div>

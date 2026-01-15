@@ -22,17 +22,8 @@ from .config import (
     WIN_LOSS_WEIGHT,
     PLAYER_DELTA_CAP,
     PLAYER_SEED_SCALE,
-    TEAM_ALIASES,
 )
-
- 
-
-def normalize_team(name: str | None) -> str:
-    if not name:
-        return ''
-    n = name.strip()
-    key = n.lower()
-    return TEAM_ALIASES.get(key, n)
+from .normalizers.team import normalize_team
 
 def canon(name: str | None) -> str:
     """Canonicalize a team name for robust equality: lowercase and remove non-alphanumerics."""

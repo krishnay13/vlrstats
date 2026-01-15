@@ -218,6 +218,13 @@ export default function HomePage() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-emerald-200/80">#{index + 1}</span>
+                    {!eloLoading && team.logo_url ? (
+                      <img
+                        src={team.logo_url}
+                        alt={`${team.team} logo`}
+                        className="h-5 w-5 bg-white/5 object-contain"
+                      />
+                    ) : null}
                     <span className="text-sm font-semibold text-white">
                       {eloLoading ? 'Loading...' : team.team}
                     </span>
@@ -263,6 +270,13 @@ export default function HomePage() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-white/70">#{index + 1}</span>
+                    {!eloLoading && player.team_logo ? (
+                      <img
+                        src={player.team_logo}
+                        alt={`${player.team} logo`}
+                        className="h-5 w-5 bg-white/5 object-contain"
+                      />
+                    ) : null}
                     <div>
                       <p className="text-sm font-semibold text-white">
                         {eloLoading ? 'Loading...' : player.player}

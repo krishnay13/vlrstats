@@ -5,6 +5,7 @@ import db from '@/app/lib/db.js';
 import { inferTeamRegion, isOlderThanSixMonths } from '@/app/lib/region-utils.js';
 import { normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getTeamLastMatchDate, buildTeamVariants } from '@/app/lib/db/activity.js';
+import { getTeamLogoUrl } from '@/app/lib/logos.js';
 import { getMatchesDateMeta, getMatchDateExpr, getMatchDateNonEmptyWhere } from '@/app/lib/db/schema.js';
 
 export async function GET(request, { params }) {
@@ -162,6 +163,7 @@ export async function GET(request, { params }) {
       region,
       is_inactive,
       last_match_date: lastMatchDate,
+      logo_url: getTeamLogoUrl(canonicalName, 'large'),
     };
 
     return NextResponse.json({ team, activePlayers, inactivePlayers });

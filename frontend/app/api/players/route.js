@@ -5,6 +5,7 @@ import db from '@/app/lib/db.js';
 import { isOlderThanSixMonths } from '@/app/lib/region-utils.js';
 import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getPlayerLastMatchDate, getPlayerTeams } from '@/app/lib/db/activity.js';
+import { getTeamLogoUrl } from '@/app/lib/logos.js';
 
 export async function GET() {
   try {
@@ -68,6 +69,7 @@ export async function GET() {
         team_name: mostRecentTeam.team_name, // Most recent team for display
         all_teams: validTeams.map(t => t.team_name), // All teams for backend
         is_inactive: isInactive,
+        team_logo: getTeamLogoUrl(mostRecentTeam.team_name, 'small'),
       };
     }).filter(p => p !== null);
     

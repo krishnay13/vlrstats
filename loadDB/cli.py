@@ -37,7 +37,15 @@ def main():
 
     p_upload_file = sub.add_parser("upload-from-file", help="Upload matches from a file")
     p_upload_file.add_argument("file", help="File containing match IDs (one per line)")
-    p_upload_file.add_argument("--match-type", choices=["VCL", "OFFSEASON", "VCT", "SHOWMATCH"], help="Match type (VCL, OFFSEASON, VCT, or SHOWMATCH)")
+    p_upload_file.add_argument("--match-type", choices=["VCL", "OFFSEASON", "VCT"], help="Match type (VCL, OFFSEASON, or VCT). Note: Showmatches are automatically skipped.")
+
+    p_ingest_file = sub.add_parser("ingest-from-file", help="Ingest matches from a file containing URLs (one per line)")
+    p_ingest_file.add_argument("file", help="File containing match URLs (one per line). Supports per-line match type: URL # VCT")
+    p_ingest_file.add_argument("--match-type", choices=["VCL", "OFFSEASON", "VCT"], help="Global match type override for all URLs (otherwise auto-detected or use per-line comments)")
+    p_ingest_file.add_argument("--no-validate", action="store_true", help="Skip data validation")
+
+    p_remove_showmatches = sub.add_parser("remove-showmatches", help="Remove all showmatch data from the database")
+    p_remove_showmatches.add_argument("--dry-run", action="store_true", help="Show what would be deleted without actually deleting")
 
     p_scrape_all_vct = sub.add_parser("scrape-all-vct", help="Clear DB and scrape all VCT 2024 & 2025 matches")
     
@@ -114,12 +122,12 @@ def main():
         match_type = args.match_type
         if not match_type:
             while True:
-                user_input = input("Enter match type (VCL, OFFSEASON, VCT, or SHOWMATCH): ").strip().upper()
-                if user_input in ["VCL", "OFFSEASON", "VCT", "SHOWMATCH"]:
+                user_input = input("Enter match type (VCL, OFFSEASON, or VCT): ").strip().upper()
+                if user_input in ["VCL", "OFFSEASON", "VCT"]:
                     match_type = user_input
                     break
                 else:
-                    print("Invalid input. Please enter VCL, OFFSEASON, VCT, or SHOWMATCH.")
+                    print("Invalid input. Please enter VCL, OFFSEASON, or VCT.")
         
         print(f"Uploading {len(match_ids)} match(es) with match type: {match_type}")
         try:
@@ -127,6 +135,46 @@ def main():
             print(f"Successfully uploaded {len(match_ids)} match(es)")
         except Exception as e:
             print(f"Error uploading matches: {e}")
+            return 1
+
+    if args.cmd == "ingest-from-file":
+        from .ingestion import load_urls_from_file, ingest_from_urls
+        try:
+            urls = load_urls_from_file(args.file)
+            if not urls:
+                print(f"No URLs found in {args.file}")
+                return 1
+            
+            print(f"Found {len(urls)} URL(s) in {args.file}")
+            print("Starting ingestion (this may take a while)...")
+            
+            result = asyncio.run(ingest_from_urls(
+                urls,
+                validate=not args.no_validate,
+                match_type=args.match_type
+            ))
+            
+            print(f"\nIngestion complete:")
+            print(f"  Success: {result.success_count}")
+            print(f"  Errors: {result.error_count}")
+            if result.skipped_count > 0:
+                print(f"  Skipped (showmatches): {result.skipped_count}")
+            if result.warnings:
+                print(f"  Warnings: {len(result.warnings)}")
+                for warning in result.warnings[:5]:  # Show first 5 warnings
+                    print(f"    - {warning}")
+                if len(result.warnings) > 5:
+                    print(f"    ... and {len(result.warnings) - 5} more warnings")
+            if result.errors:
+                print(f"  Error details:")
+                for error in result.errors[:5]:  # Show first 5 errors
+                    print(f"    - {error}")
+                if len(result.errors) > 5:
+                    print(f"    ... and {len(result.errors) - 5} more errors")
+        except Exception as e:
+            print(f"Error ingesting from file: {e}")
+            import traceback
+            traceback.print_exc()
             return 1
 
     if args.cmd == "scrape-all-vct":
@@ -178,6 +226,61 @@ def main():
             traceback.print_exc()
             return 1
         return
+
+    if args.cmd == "remove-showmatches":
+        from .db_utils import get_conn
+        import sqlite3
+        
+        conn = get_conn()
+        cur = conn.cursor()
+        
+        # Count showmatches
+        cur.execute("SELECT COUNT(*) FROM Matches WHERE match_type = 'SHOWMATCH'")
+        count = cur.fetchone()[0]
+        
+        if count == 0:
+            print("No showmatches found in database.")
+            conn.close()
+            return 0
+        
+        if args.dry_run:
+            print(f"DRY RUN: Would delete {count} showmatch(es)")
+            cur.execute("SELECT match_id, team_a, team_b, match_name FROM Matches WHERE match_type = 'SHOWMATCH' LIMIT 10")
+            matches = cur.fetchall()
+            print("\nSample matches that would be deleted:")
+            for match_id, team_a, team_b, match_name in matches:
+                print(f"  Match {match_id}: {team_a} vs {team_b} ({match_name})")
+            if count > 10:
+                print(f"  ... and {count - 10} more")
+            conn.close()
+            return 0
+        
+        # Get all showmatch IDs
+        cur.execute("SELECT match_id FROM Matches WHERE match_type = 'SHOWMATCH'")
+        match_ids = [row[0] for row in cur.fetchall()]
+        
+        print(f"Deleting {len(match_ids)} showmatch(es)...")
+        
+        # Delete player stats for these matches
+        cur.execute("DELETE FROM Player_Stats WHERE match_id IN ({})".format(','.join('?' * len(match_ids))), match_ids)
+        player_stats_deleted = cur.rowcount
+        
+        # Delete maps for these matches
+        cur.execute("DELETE FROM Maps WHERE match_id IN ({})".format(','.join('?' * len(match_ids))), match_ids)
+        maps_deleted = cur.rowcount
+        
+        # Delete matches
+        cur.execute("DELETE FROM Matches WHERE match_type = 'SHOWMATCH'")
+        matches_deleted = cur.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"Deleted:")
+        print(f"  {matches_deleted} match(es)")
+        print(f"  {maps_deleted} map(s)")
+        print(f"  {player_stats_deleted} player stat record(s)")
+        return 0
 
 
 if __name__ == "__main__":

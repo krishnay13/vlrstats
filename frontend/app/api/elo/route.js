@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import db from '@/app/lib/db.js'
+import { getTeamLogoUrl } from '@/app/lib/logos.js'
 
 export async function GET(request) {
   try {
@@ -19,6 +20,10 @@ export async function GET(request) {
         `
       )
       .all(topTeams)
+      .map((team) => ({
+        ...team,
+        logo_url: getTeamLogoUrl(team.team, 'small'),
+      }))
 
     const players = db
       .prepare(
@@ -30,6 +35,10 @@ export async function GET(request) {
         `
       )
       .all(topPlayers)
+      .map((player) => ({
+        ...player,
+        team_logo: getTeamLogoUrl(player.team, 'small'),
+      }))
 
     return NextResponse.json({ teams, players })
   } catch (error) {

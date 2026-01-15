@@ -7,7 +7,11 @@ name variations, then generates standardized mappings.
 import json
 import sqlite3
 from typing import Dict, List, Tuple
-from .config import DB_PATH, ALIASES_FILE, TEAM_ALIASES
+from .config import DB_PATH, TEAM_ALIASES
+import os
+
+# Use new alias system location
+ALIASES_FILE = os.path.join(os.path.dirname(__file__), 'aliases', 'teams.json')
 
 
 def get_all_team_names() -> List[str]:

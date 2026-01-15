@@ -2,6 +2,8 @@
 
 import { NextResponse } from 'next/server';
 import db from '@/app/lib/db.js';
+import { normalizeTeamName } from '@/app/lib/team-utils.js';
+import { getTeamLogoUrl } from '@/app/lib/logos.js';
 
 export async function GET(request, { params }) {
   try {
@@ -37,8 +39,8 @@ export async function GET(request, { params }) {
       const cleanMapName = map.map ? map.map.replace(/^\d+/, '') : map.map;
       
       // Get team names from match for display
-      const team1Name = match.team_a || match.team1_name;
-      const team2Name = match.team_b || match.team2_name;
+      const team1Name = normalizeTeamName(match.team_a || match.team1_name);
+      const team2Name = normalizeTeamName(match.team_b || match.team2_name);
 
       return { 
         ...map, 
@@ -46,6 +48,8 @@ export async function GET(request, { params }) {
         map_name: cleanMapName, // Add map_name alias
         team1_name: team1Name,
         team2_name: team2Name,
+        team1_logo: getTeamLogoUrl(team1Name, 'large'),
+        team2_logo: getTeamLogoUrl(team2Name, 'large'),
         team1_score: map.team_a_score || 0,
         team2_score: map.team_b_score || 0,
         playerStats: playerStatsWithNames 
@@ -65,7 +69,20 @@ export async function GET(request, { params }) {
       };
     });
 
-    return NextResponse.json({ match, maps: mapsWithStats, playerStats: playerStatsWithNames });
+    const matchTeam1 = normalizeTeamName(match.team_a || match.team1_name);
+    const matchTeam2 = normalizeTeamName(match.team_b || match.team2_name);
+
+    return NextResponse.json({
+      match: {
+        ...match,
+        team1_name: matchTeam1,
+        team2_name: matchTeam2,
+        team1_logo: getTeamLogoUrl(matchTeam1, 'large'),
+        team2_logo: getTeamLogoUrl(matchTeam2, 'large'),
+      },
+      maps: mapsWithStats,
+      playerStats: playerStatsWithNames,
+    });
   } catch (error) {
     console.error('Error fetching match details:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

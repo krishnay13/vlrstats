@@ -5,6 +5,7 @@ import db from '@/app/lib/db.js';
 import { getTournamentSortPriority, getRegionFromMatchName, getRegionSortOrder } from '@/app/lib/region-utils.js';
 import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getMatchesDateMeta, getMatchDateExpr } from '@/app/lib/db/schema.js';
+import { getEventLogoUrl, getTeamLogoUrl } from '@/app/lib/logos.js';
 
 export async function GET() {
   try {
@@ -98,6 +99,9 @@ export async function GET() {
           team2_name: team2,
           team1_score: team1Score,
           team2_score: team2Score,
+          team1_logo: getTeamLogoUrl(team1, 'small'),
+          team2_logo: getTeamLogoUrl(team2, 'small'),
+          event_logo: getEventLogoUrl({ region, tournament }),
         };
       })
       .filter(match => match !== null);

@@ -97,7 +97,15 @@ export default function TeamsPage() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-sm font-semibold text-emerald-100">
-                        {team.team_name?.charAt(0) || 'T'}
+                        {team.logo_url ? (
+                          <img
+                            src={team.logo_url}
+                            alt={`${team.team_name} logo`}
+                            className="h-7 w-7 bg-white/5 object-contain"
+                          />
+                        ) : (
+                          team.team_name?.charAt(0) || 'T'
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white">{team.team_name}</span>

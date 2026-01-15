@@ -1,7 +1,9 @@
 // Team normalization and filtering utilities
 
 // Team aliases mapping (variant -> canonical)
-// Keep this in sync with Python-side aliases (loadDB/aliases.json, loadDB/config.py)
+// NOTE: This should be kept in sync with Python-side aliases (loadDB/aliases/teams.json)
+// The canonical source is loadDB/aliases/teams.json - update this file when that changes
+// TODO: Consider auto-generating this from loadDB/aliases/teams.json or sharing the JSON file
 const TEAM_ALIASES = {
   // Bilibili / BLG variants
   'guangzhou huadu bilibili gaming(bilibili gaming)': 'Bilibili Gaming',
@@ -45,6 +47,17 @@ const TEAM_ALIASES = {
   'gx': 'GIANTX',
   'nrg': 'NRG',
   'loud': 'LOUD',
+  // Additional aliases from loadDB/aliases/teams.json
+  'jd mall jdg esports(jdg esports)': 'JDG Esports',
+  'jd mall jdg esports': 'JDG Esports',
+  'jdg esports': 'JDG Esports',
+  'jdg': 'JDG Esports',
+  'movistar koi(koi)': 'KOI',
+  'movistar koi': 'KOI',
+  'koi': 'KOI',
+  'visa krü(krü esports)': 'KRÜ Esports',
+  'via kru esports': 'KRÜ Esports',
+  'via kru': 'KRÜ Esports',
 };
 
 // Showmatch teams to filter out

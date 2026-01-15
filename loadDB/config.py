@@ -1,53 +1,21 @@
-import json
 import os
 
 # Base paths
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DB_PATH = os.path.join(REPO_ROOT, 'valorant_esports.db')
 
-# Team alias configuration
-ALIASES_FILE = os.path.join(os.path.dirname(__file__), 'aliases.json')
+# Use unified alias system
+from .aliases import get_all_aliases, normalize_team
 
+# Load all aliases
+_ALL_ALIASES = get_all_aliases()
 
-def _load_aliases() -> dict[str, str]:
-    default_aliases = {
-        'guangzhou huadu bilibili gaming(bilibili gaming)': 'Bilibili Gaming',
-        'guangzhou huadu bilibili gaming': 'Bilibili Gaming',
-        'bilibili gaming': 'Bilibili Gaming',
-        'g2': 'G2 Esports',
-        'tl': 'Team Liquid',
-        'fnc': 'FNATIC',
-        't1': 'T1',
-        'sen': 'Sentinels',
-        'rrq': 'Rex Regum Qeon',
-        'prx': 'Paper Rex',
-        'edg': 'EDward Gaming',
-        'drx': 'DRX',
-        'blg': 'Bilibili Gaming',
-        'mibr': 'MIBR',
-        'xlg': 'Xi Lai Gaming',
-        'th': 'Team Heretics',
-        'gx': 'GIANTX',
-        'nrg': 'NRG',
-        'loud': 'LOUD',
-        'kru': 'KRÜ Esports',
-        'kru esports': 'KRÜ Esports',
-        'visa kru': 'KRÜ Esports',
-        'visa kru esports': 'KRÜ Esports',
-    }
-    try:
-        if os.path.exists(ALIASES_FILE):
-            with open(ALIASES_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    # ensure keys are lowercase for lookups
-                    return {str(k).lower(): str(v) for k, v in data.items()}
-    except Exception:
-        pass
-    return default_aliases
+# Team aliases (for backward compatibility)
+TEAM_ALIASES: dict[str, str] = _ALL_ALIASES.get('team', {})
 
-
-TEAM_ALIASES: dict[str, str] = _load_aliases()
+# Legacy aliases file path (moved to _backup/aliases.json)
+# New aliases are in aliases/ directory
+ALIASES_FILE = os.path.join(os.path.dirname(__file__), 'aliases', 'teams.json')
 
 # Elo defaults (tweak here to tune system)
 START_ELO = 1500.0
