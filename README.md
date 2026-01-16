@@ -81,6 +81,39 @@ python -m loadDB.upcoming
 # Run this regularly to keep the upcoming matches fresh on the homepage
 ```
 
+### 3b. Ingest Next Completed Upcoming Match (Automatic)
+
+Once a match from your upcoming list completes, you can automatically ingest it with a single command:
+
+```bash
+# Using the standalone script (easiest)
+python ingest_next_completed.py
+
+# Or using the CLI
+python -m loadDB.cli ingest-next-completed
+
+# Skip data validation for faster ingestion
+python ingest_next_completed.py --no-validate
+```
+
+**How it works:**
+1. Queries the database for the earliest upcoming match that has been completed (has non-NULL scores)
+2. If found, automatically ingests the match from vlr.gg
+3. Elo ratings are automatically recalculated for all years after ingestion
+4. If no completed match is found, it informs you that all upcoming matches are still in progress
+
+**Typical workflow:**
+```bash
+# 1. Populate upcoming matches (once per hour or as needed)
+python -m loadDB.upcoming
+
+# 2. When first match completes, ingest it automatically
+python ingest_next_completed.py
+
+# 3. Repeat step 2 as each match in the upcoming list completes
+# → No need to manually find match IDs!
+```
+
 ### 4. Build Elo Ratings
 ```bash
 # Compute Elo (prints top teams). Use --save to persist snapshots/history

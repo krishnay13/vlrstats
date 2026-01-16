@@ -93,6 +93,9 @@ def main():
     p_test_matches = sub.add_parser("test-matches", help="Test random matches for data quality")
     p_test_matches.add_argument("-n", "--num", type=int, default=10, help="Number of random matches to test")
 
+    p_ingest_next = sub.add_parser("ingest-next-completed", help="Ingest the next completed upcoming match")
+    p_ingest_next.add_argument("--no-validate", action="store_true", help="Skip data validation during ingestion")
+
     p_standardize = sub.add_parser("standardize-teams", help="Use LLM or heuristics to standardize team names and identify duplicates")
     p_standardize.add_argument("--provider", choices=["openai", "anthropic", "heuristics"], default="openai", help="Provider: LLM (openai/anthropic) or heuristics (default: openai)")
     p_standardize.add_argument("--api-key", type=str, help="API key (or set OPENAI_API_KEY/ANTHROPIC_API_KEY env var)")
@@ -589,6 +592,45 @@ def main():
     if args.cmd == "test-matches":
         from .test_matches import test_random_matches
         test_random_matches(args.num)
+        return
+
+    if args.cmd == "ingest-next-completed":
+        from .db_utils import get_conn
+        
+        # Query the next upcoming match that has been completed (has scores)
+        conn = get_conn()
+        cur = conn.cursor()
+        
+        # Get first upcoming match with scores (ordered by match_ts_utc asc)
+        cur.execute("""
+            SELECT match_id, team_a, team_b, team_a_score, team_b_score, match_ts_utc
+            FROM Matches
+            WHERE match_ts_utc IS NOT NULL
+            AND datetime(match_ts_utc, '+5 hours') > datetime('now')
+            AND team_a_score IS NOT NULL
+            AND team_b_score IS NOT NULL
+            ORDER BY match_ts_utc ASC
+            LIMIT 1
+        """)
+        
+        row = cur.fetchone()
+        conn.close()
+        
+        if not row:
+            print("No completed upcoming matches found.")
+            print("Upcoming matches will be ingested once they have scores.")
+            return 0
+        
+        match_id, team_a, team_b, ta_score, tb_score, match_ts_utc = row
+        
+        print(f"\nFound completed upcoming match:")
+        print(f"  Match ID: {match_id}")
+        print(f"  {team_a} {ta_score}-{tb_score} {team_b}")
+        print(f"  Time: {match_ts_utc}")
+        print(f"\nIngesting match {match_id}...")
+        
+        # Ingest the match
+        vlr_ingest.ingest([match_id], validate=not args.no_validate)
         return
 
     if args.cmd == "standardize-teams":

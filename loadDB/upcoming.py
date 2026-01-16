@@ -172,11 +172,10 @@ def upsert_upcoming(rows: List[Dict[str, Any]]) -> int:
         match_name = m.get("match_name") or f"Match {match_id}"
         team_a = _tbd(m.get("team_a"))
         team_b = _tbd(m.get("team_b"))
-        ta_score = m.get("team_a_score")
-        tb_score = m.get("team_b_score")
-        # For upcoming, treat zero/empty as None to indicate not played
-        ta_score = None if (ta_score is None or ta_score == 0) else ta_score
-        tb_score = None if (tb_score is None or tb_score == 0) else tb_score
+        # ALWAYS set scores to None for upcoming matches - they haven't been played yet
+        # This prevents placeholder/preview scores from corrupting the database
+        ta_score = None
+        tb_score = None
         match_ts_utc = m.get("match_ts_utc")
         match_date = (match_ts_utc or "")[:10] if match_ts_utc else m.get("match_date")
         bans_picks = m.get("bans_picks")
