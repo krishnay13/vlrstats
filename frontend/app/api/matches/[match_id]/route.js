@@ -146,7 +146,7 @@ export async function GET(request, { params }) {
     // Apply same assignment logic for totals (if present)
     let t1Total = 0;
     let t2Total = 0;
-    const playerStatsWithNames = playerStats.map((stat, idx) => {
+    const playerStatsWithNames = matchTotalStats.map((stat, idx) => {
       const player_name = stat.player || 'Unknown';
       const normalizedStatTeam = stat.team ? normalizeTeamName(stat.team) : null;
       let team_name = null;
