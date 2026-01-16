@@ -75,6 +75,12 @@ async def ingest_matches(
     # Print results for backward compatibility
     if result.success_count > 0 or result.error_count > 0:
         print(f"Ingestion complete: {result.success_count} successful, {result.error_count} errors")
+    
+    # Automatically recalculate ELO snapshots for 2026 and all-time after ingestion
+    if result.success_count > 0:
+        print("\nRecalculating ELO snapshots...")
+        from .elo import compute_elo_snapshots
+        compute_elo_snapshots()
 
 
 # Backward compatibility: provide synchronous ingest function

@@ -24,27 +24,12 @@ function parseDateRange(dateRange) {
     return { startDate: null, endDate: null }
   }
 
-  const today = new Date()
-  today.setHours(23, 59, 59, 999) // End of today
-
   if (dateRange === '2024') {
     return { startDate: '2024-01-01', endDate: '2024-12-31' }
   } else if (dateRange === '2025') {
     return { startDate: '2025-01-01', endDate: '2025-12-31' }
-  } else if (dateRange.toLowerCase() === 'last-3-months') {
-    const start = new Date(today)
-    start.setMonth(start.getMonth() - 3)
-    return {
-      startDate: start.toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0]
-    }
-  } else if (dateRange.toLowerCase() === 'last-6-months') {
-    const start = new Date(today)
-    start.setMonth(start.getMonth() - 6)
-    return {
-      startDate: start.toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0]
-    }
+  } else if (dateRange === '2026') {
+    return { startDate: '2026-01-01', endDate: '2026-12-31' }
   }
 
   return { startDate: null, endDate: null }
@@ -203,17 +188,60 @@ export async function GET(request) {
     let players = []
 
     if (useDateRange) {
-      // Compute Elo on-the-fly for date range
-      teams = computeEloRatings(db, startDate, endDate, topTeams)
-        .map((team) => ({
-          ...team,
-          logo_url: getTeamLogoUrl(team.team, 'small'),
-        }))
+      // Compute Elo on-the-fly for 2026 (current year) and all-time
+      if (dateRange === '2026') {
+        teams = computeEloRatings(db, startDate, endDate, topTeams)
+          .map((team) => ({
+            ...team,
+            logo_url: getTeamLogoUrl(team.team, 'small'),
+          }))
+      } else {
+        // For 2024 and 2025, use pre-computed stored tables
+        const tableName = `Elo_${dateRange}`
+        if (tableExists(db, tableName)) {
+          try {
+            teams = db
+              .prepare(
+                `
+                SELECT team, rating, matches
+                FROM ${tableName}
+                ORDER BY rating DESC
+                LIMIT ?
+                `
+              )
+              .all(topTeams)
+              .map((team) => ({
+                ...team,
+                logo_url: getTeamLogoUrl(team.team, 'small'),
+              }))
+          } catch (error) {
+            teams = []
+          }
+        }
+      }
 
-      // For players, we'd need to compute player Elo too, but that's more complex
-      // For now, return empty array for players when using date range
-      // TODO: Implement player Elo computation for date ranges
-      players = []
+      // Get players from the corresponding table
+      const playerTableName = dateRange === '2026' ? 'Player_Elo_Current' : `Player_Elo_${dateRange}`
+      if (tableExists(db, playerTableName)) {
+        try {
+          players = db
+            .prepare(
+              `
+              SELECT player, team, rating, matches
+              FROM ${playerTableName}
+              ORDER BY rating DESC
+              LIMIT ?
+              `
+            )
+            .all(topPlayers)
+            .map((player) => ({
+              ...player,
+              team_logo: getTeamLogoUrl(player.team, 'small'),
+            }))
+        } catch (error) {
+          players = []
+        }
+      }
     } else {
       // Use pre-computed Elo_Current table
       if (tableExists(db, 'Elo_Current')) {

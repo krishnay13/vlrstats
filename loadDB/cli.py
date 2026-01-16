@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 from . import vlr_ingest
-from .elo import compute_elo
+from .elo import compute_elo, compute_elo_snapshots
 from .display import top_players, top_teams, team_history, player_history
 from .tournament_scraper import scrape_tournament_match_ids, save_match_ids_to_file, load_match_ids_from_file
 
@@ -14,7 +14,7 @@ def main():
     p_ingest.add_argument("items", nargs="+", help="Match IDs or URLs")
 
     p_elo = sub.add_parser("elo", help="Compute Elo ratings")
-    p_elo.add_argument("action", choices=["compute"], help="Elo action")
+    p_elo.add_argument("action", choices=["compute", "snapshots"], help="Elo action")
     p_elo.add_argument("--save", action="store_true", help="Persist history and snapshots")
     p_elo.add_argument("--top", type=int, default=20, help="Print top N teams after compute")
     p_elo.add_argument(
@@ -115,6 +115,10 @@ def main():
             recency_half_life=getattr(args, "recency_half_life", None),
             delta_summary=getattr(args, "delta_summary", False),
         )
+        return
+
+    if args.cmd == "elo" and args.action == "snapshots":
+        compute_elo_snapshots()
         return
 
     if args.cmd == "show":

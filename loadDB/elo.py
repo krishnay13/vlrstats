@@ -596,23 +596,21 @@ def compute_elo(
         row = cur.fetchone()
         global_avg_rating = float(row[0]) if row and row[0] is not None else 1.0
 
-        # Most frequent team per player from Player_Stats
+        # Most recent team per player from Player_Stats (not most frequent)
+        # This ensures players who changed teams show up with their current team
         cur.execute(
             """
-            SELECT player, team, COUNT(*) as c
+            SELECT player, team, match_id
             FROM Player_Stats
             WHERE player IS NOT NULL AND team IS NOT NULL
-            GROUP BY player, team
+            ORDER BY match_id DESC
             """
         )
-        team_counts = cur.fetchall()
-        most_team: dict[str, tuple[str,int]] = {}
-        for player, team, c in team_counts:
-            if not player:
-                continue
-            prev = most_team.get(player)
-            if prev is None or c > prev[1]:
-                most_team[player] = (normalize_team(team), c)
+        player_team_rows = cur.fetchall()
+        most_team: dict[str, str] = {}
+        for player, team, match_id in player_team_rows:
+            if player and player not in most_team:
+                most_team[player] = normalize_team(team)
 
         # Per-player averages and appearances for seeding
         cur.execute(
@@ -632,7 +630,7 @@ def compute_elo(
         all_players = set(avg_map.keys()) | set(player_ratings.keys())
         to_insert = []
         for p in all_players:
-            team = most_team.get(p, (None, 0))[0]
+            team = most_team.get(p)
             if p in player_ratings:
                 rating_val = player_ratings[p]
                 matches_val = player_games.get(p, 0)
@@ -662,6 +660,61 @@ def compute_elo(
         print(f"{i:2d}. {team:30s} {rating:7.2f} ({games_played[team]} matches)")
 
     conn.close()
+
+
+def compute_elo_snapshots():
+    """
+    Compute and store ELO snapshots for fixed date ranges (2024, 2025) and 
+    recalculate for current year (2026) and all-time.
+    Automatically called after ingestion to keep current year and all-time updated.
+    """
+    if not os.path.exists(DB_PATH):
+        raise SystemExit(f"DB not found at {DB_PATH}")
+
+    # Define date ranges: fixed years and current year
+    date_ranges = [
+        ('2024', '2024-01-01', '2024-12-31'),
+        ('2025', '2025-01-01', '2025-12-31'),
+        ('2026', '2026-01-01', '2026-12-31'),
+        (None, None, None),  # all-time
+    ]
+
+    for range_name, start_date, end_date in date_ranges:
+        print(f"\nComputing ELO snapshot for {range_name or 'all-time'}...")
+        
+        # Call compute_elo with save=True to populate Elo_Current and Player_Elo_Current
+        compute_elo(save=True, top=5, start_date=start_date, end_date=end_date)
+        
+        # Now copy from Elo_Current and Player_Elo_Current to snapshot tables
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        if range_name:
+            # Create/update team snapshot table for this year
+            team_table = f"Elo_{range_name}"
+            cur.execute(f"DROP TABLE IF EXISTS {team_table}")
+            cur.execute(f"""
+                CREATE TABLE {team_table} AS
+                SELECT team, rating, matches FROM Elo_Current
+            """)
+            
+            # Create/update player snapshot table for this year
+            player_table = f"Player_Elo_{range_name}"
+            cur.execute(f"DROP TABLE IF EXISTS {player_table}")
+            cur.execute(f"""
+                CREATE TABLE {player_table} AS
+                SELECT player, team, rating, matches, last_match_id FROM Player_Elo_Current
+            """)
+            print(f"  ✓ Snapshot tables {team_table} and {player_table} created")
+        else:
+            # For all-time, the Current tables are the snapshot (they already have all-time data)
+            print("  ✓ All-time ELO stored in Elo_Current and Player_Elo_Current")
+        
+        conn.commit()
+        conn.close()
+    
+    print("\n✓ ELO snapshots completed successfully!")
+
 
 
 def _compute_elo_ratings(start_date: str | None = None, end_date: str | None = None):

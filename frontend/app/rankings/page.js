@@ -6,11 +6,10 @@ import { Trophy, TrendingUp, Calendar } from 'lucide-react'
 import { fetchJson } from '@/app/lib/api'
 
 const DATE_RANGES = [
-  { value: 'all-time', label: 'Since 2024' },
+  { value: 'all-time', label: 'All Time' },
   { value: '2024', label: '2024' },
   { value: '2025', label: '2025' },
-  { value: 'last-6-months', label: 'Last 6 Months' },
-  { value: 'last-3-months', label: 'Last 3 Months' },
+  { value: '2026', label: '2026' },
 ]
 
 export default function RankingsPage() {
