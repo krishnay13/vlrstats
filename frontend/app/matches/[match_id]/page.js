@@ -278,6 +278,19 @@ export default function MatchDetailsPage() {
               </Link>
             </motion.div>
           </div>
+
+          {/* Bans/Picks Display */}
+          {match.bans_picks && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4"
+            >
+              <h3 className="mb-2 text-sm font-semibold text-white/80">Map Vetoes</h3>
+              <p className="text-sm text-white/60">{match.bans_picks}</p>
+            </motion.div>
+          )}
         </div>
       </motion.div>
 

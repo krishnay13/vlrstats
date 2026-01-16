@@ -178,6 +178,7 @@ export async function GET(request, { params }) {
         team2_name: matchTeam2,
         team1_logo: getTeamLogoUrl(matchTeam1, 'large'),
         team2_logo: getTeamLogoUrl(matchTeam2, 'large'),
+        bans_picks: match.bans_picks,
       },
       maps: mapsWithStats,
       playerStats: playerStatsWithNames,

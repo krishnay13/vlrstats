@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Users, User, Trophy } from 'lucide-react'
+import { ArrowLeft, Users, User, Trophy, Zap } from 'lucide-react'
 import { fetchJson } from '@/app/lib/api'
 
 export default function TeamDetailsPage() {
@@ -13,6 +13,7 @@ export default function TeamDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedYear, setSelectedYear] = useState(2026)
+  const [bansPicks, setBansPicks] = useState(null)
 
   useEffect(() => {
     async function fetchTeamDetails() {
@@ -28,6 +29,15 @@ export default function TeamDetailsPage() {
           throw err
         }
         setData(teamData)
+        
+        // Fetch bans/picks data
+        try {
+          const bansPicksData = await fetchJson(`/api/teams/${params.team_id}/bans-picks?year=${selectedYear}`)
+          setBansPicks(bansPicksData)
+        } catch (err) {
+          // Bans/picks data is optional
+          setBansPicks(null)
+        }
       } catch (err) {
         setError(err.message)
       } finally {
@@ -229,6 +239,78 @@ export default function TeamDetailsPage() {
                 </div>
               </div>
             )}
+
+      {/* Map Veto History */}
+      {bansPicks && (bansPicks.bans.length > 0 || bansPicks.picks.length > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mt-6"
+        >
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+            <h2 className="mb-1 flex items-center text-2xl font-semibold">
+              <Zap className="mr-2 h-5 w-5 text-emerald-200" />
+              Map Veto Tendencies
+            </h2>
+            <p className="mb-4 text-sm text-white/60">
+              Based on {bansPicks.total_matches_with_veto} match{bansPicks.total_matches_with_veto !== 1 ? 'es' : ''} with veto data in {selectedYear}
+            </p>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Bans */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-red-200">Maps Banned</h3>
+                {bansPicks.bans.length > 0 ? (
+                  <div className="space-y-2">
+                    {bansPicks.bans.map((ban, index) => (
+                      <motion.div
+                        key={`ban-${ban.map}`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="flex items-center justify-between rounded-lg border border-red-300/20 bg-red-500/10 p-3"
+                      >
+                        <span className="font-medium text-white capitalize">{ban.map}</span>
+                        <span className="rounded-full border border-red-300/40 bg-red-500/20 px-2 py-1 text-xs text-red-100">
+                          {ban.count} time{ban.count !== 1 ? 's' : ''}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/50">No map bans in this period</p>
+                )}
+              </div>
+
+              {/* Picks */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-emerald-200">Maps Picked</h3>
+                {bansPicks.picks.length > 0 ? (
+                  <div className="space-y-2">
+                    {bansPicks.picks.map((pick, index) => (
+                      <motion.div
+                        key={`pick-${pick.map}`}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="flex items-center justify-between rounded-lg border border-emerald-300/20 bg-emerald-500/10 p-3"
+                      >
+                        <span className="font-medium text-white capitalize">{pick.map}</span>
+                        <span className="rounded-full border border-emerald-300/40 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100">
+                          {pick.count} time{pick.count !== 1 ? 's' : ''}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/50">No map picks in this period</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
             {totalPlayers === 0 && (
               <div className="py-12 text-center">

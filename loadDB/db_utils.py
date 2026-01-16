@@ -49,34 +49,60 @@ def upsert_match(conn: sqlite3.Connection, row: tuple) -> None:
     """
     Insert or update a match record in the database.
     
-    Handles both old format (12 fields) and new format (12 fields with match_type classification).
+    Handles both old format (12 fields) and new format (13 fields with bans_picks).
     The match_type field stores VCT/VCL/OFFSEASON/SHOWMATCH classification.
     
     Args:
         conn: Database connection
         row: Tuple with match data (match_id, tournament, stage, match_type, match_name,
-             team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date)
+             team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date, bans_picks)
     """
-    sql = (
-        """
-        INSERT INTO Matches (
-            match_id, tournament, stage, match_type, match_name,
-            team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(match_id) DO UPDATE SET
-            tournament=excluded.tournament,
-            stage=excluded.stage,
-            match_type=COALESCE(excluded.match_type, match_type),
-            match_name=excluded.match_name,
-            team_a=excluded.team_a,
-            team_b=excluded.team_b,
-            team_a_score=excluded.team_a_score,
-            team_b_score=excluded.team_b_score,
-            match_result=excluded.match_result,
-            match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
-            match_date=COALESCE(excluded.match_date, match_date)
-        """
-    )
+    # Handle both old format (12 fields) and new format (13 fields with bans_picks)
+    if len(row) == 12:
+        # Old format without bans_picks
+        sql = (
+            """
+            INSERT INTO Matches (
+                match_id, tournament, stage, match_type, match_name,
+                team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                tournament=excluded.tournament,
+                stage=excluded.stage,
+                match_type=COALESCE(excluded.match_type, match_type),
+                match_name=excluded.match_name,
+                team_a=excluded.team_a,
+                team_b=excluded.team_b,
+                team_a_score=excluded.team_a_score,
+                team_b_score=excluded.team_b_score,
+                match_result=excluded.match_result,
+                match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
+                match_date=COALESCE(excluded.match_date, match_date)
+            """
+        )
+    else:
+        # New format with bans_picks
+        sql = (
+            """
+            INSERT INTO Matches (
+                match_id, tournament, stage, match_type, match_name,
+                team_a, team_b, team_a_score, team_b_score, match_result, match_ts_utc, match_date, bans_picks
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                tournament=excluded.tournament,
+                stage=excluded.stage,
+                match_type=COALESCE(excluded.match_type, match_type),
+                match_name=excluded.match_name,
+                team_a=excluded.team_a,
+                team_b=excluded.team_b,
+                team_a_score=excluded.team_a_score,
+                team_b_score=excluded.team_b_score,
+                match_result=excluded.match_result,
+                match_ts_utc=COALESCE(excluded.match_ts_utc, match_ts_utc),
+                match_date=COALESCE(excluded.match_date, match_date),
+                bans_picks=COALESCE(excluded.bans_picks, bans_picks)
+            """
+        )
     conn.execute(sql, row)
 
 

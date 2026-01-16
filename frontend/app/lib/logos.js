@@ -78,6 +78,11 @@ const TEAM_LOGO_OVERRIDES = {
     default: '600px-2GAME_Esports_2024_allmode.png',
     large: '600px-2GAME_Esports_2024_allmode.png',
   },
+  envy: {
+    small: '50px-Team_Envy_2018_darkmode.png',
+    default: '600px-ENVY_2025_full_darkmode.png',
+    large: '600px-ENVY_2025_full_darkmode.png',
+  },
 }
 
 function buildLogoIndex() {

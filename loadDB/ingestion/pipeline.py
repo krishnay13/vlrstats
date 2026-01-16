@@ -111,6 +111,7 @@ async def scrape_and_normalize_match(url: str) -> tuple:
         match_result,
         match_meta['match_ts_utc'],
         match_meta['match_date'],
+        match_meta.get('bans_picks'),
     )
     
     return match_row, maps_info, players_info

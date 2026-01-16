@@ -348,6 +348,22 @@ def extract_tournament_info(soup: BeautifulSoup, url: str) -> Tuple[str, str, st
     return tournament, stage, match_name
 
 
+def extract_bans_picks(soup: BeautifulSoup) -> Optional[str]:
+    """
+    Extract bans and picks information from match header note.
+    
+    Args:
+        soup: BeautifulSoup parsed HTML
+    
+    Returns:
+        Bans/picks text if found, None otherwise
+    """
+    header_note = soup.select_one('.match-header-note')
+    if header_note:
+        return header_note.get_text(' ', strip=True)
+    return None
+
+
 def detect_showmatch(soup: BeautifulSoup, match_name: str) -> bool:
     """
     Detect if a match is a showmatch.
@@ -397,6 +413,7 @@ def extract_match_metadata(soup: BeautifulSoup, match_id: int, url: str) -> dict
         - match_ts_utc
         - match_date
         - is_showmatch
+        - bans_picks
     """
     team_a, team_b = extract_teams(soup)
     a_score, b_score = extract_match_scores(soup)
@@ -404,6 +421,7 @@ def extract_match_metadata(soup: BeautifulSoup, match_id: int, url: str) -> dict
     dt_utc = extract_match_datetime(soup)
     date_str = dt_utc[:10] if dt_utc else None
     is_showmatch = detect_showmatch(soup, match_name)
+    bans_picks = extract_bans_picks(soup)
     
     return {
         'match_id': match_id,
@@ -417,4 +435,5 @@ def extract_match_metadata(soup: BeautifulSoup, match_id: int, url: str) -> dict
         'match_ts_utc': dt_utc,
         'match_date': date_str,
         'is_showmatch': is_showmatch,
+        'bans_picks': bans_picks,
     }
