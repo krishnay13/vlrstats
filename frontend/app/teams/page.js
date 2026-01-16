@@ -18,6 +18,7 @@ const REGION_LABELS = {
 export default function TeamsPage() {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
     async function fetchTeams() {
@@ -47,8 +48,11 @@ export default function TeamsPage() {
     )
   }
 
+  // Filter teams based on showInactive toggle
+  const filteredTeams = showInactive ? teams : teams.filter(team => !team.is_inactive)
+
   // Group teams by region
-  const teamsByRegion = teams.reduce((acc, team) => {
+  const teamsByRegion = filteredTeams.reduce((acc, team) => {
     const region = team.region || 'UNKNOWN'
     if (!acc[region]) {
       acc[region] = []
@@ -64,10 +68,25 @@ export default function TeamsPage() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-4"
       >
-        <h1 className="text-2xl font-semibold tracking-tight mb-1">Teams</h1>
-        <p className="text-sm text-white/60">
-          Explore all Valorant esports teams organized by region
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">Teams</h1>
+            <p className="text-sm text-white/60">
+              Explore all Valorant esports teams organized by region
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className="h-4 w-4 rounded border border-white/20 bg-white/5 accent-emerald-500"
+              />
+              <span className="text-xs text-white/60">Show Inactive</span>
+            </label>
+          </div>
+        </div>
       </motion.div>
 
       <div className="space-y-6">
@@ -83,7 +102,13 @@ export default function TeamsPage() {
               className="overflow-hidden rounded-2xl border border-white/10 bg-white/5"
             >
               <div className="border-b border-white/10 bg-white/5 px-4 py-3">
-                <h2 className="text-lg font-semibold text-white">{REGION_LABELS[region] || region}</h2>
+                <h2 className="text-lg font-semibold text-white mb-3">{REGION_LABELS[region] || region}</h2>
+                <div className="grid grid-cols-5 gap-4 text-xs font-semibold uppercase tracking-wide text-white/60">
+                  <div className="col-span-2">Team</div>
+                  <div className="text-center">Match Record</div>
+                  <div className="text-center">Map Record</div>
+                  <div className="text-center">Round Diff</div>
+                </div>
               </div>
 
               <div className="divide-y divide-white/5">
@@ -93,9 +118,9 @@ export default function TeamsPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.01 }}
-                    className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
+                    className="grid grid-cols-5 gap-4 items-center px-4 py-3 transition-colors hover:bg-white/5"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="col-span-2 flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-sm font-semibold text-emerald-100">
                         {team.logo_url ? (
                           <img
@@ -108,7 +133,12 @@ export default function TeamsPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-white">{team.team_name}</span>
+                        <Link
+                          href={`/teams/${encodeURIComponent(team.team_name)}`}
+                          className="text-sm font-medium text-white hover:text-emerald-200 transition-colors"
+                        >
+                          {team.team_name}
+                        </Link>
                         {team.is_inactive && (
                           <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200">
                             Inactive
@@ -116,13 +146,27 @@ export default function TeamsPage() {
                         )}
                       </div>
                     </div>
-                    <Link
-                      href={`/teams/${encodeURIComponent(team.team_name)}`}
-                      className="flex items-center gap-1 text-xs font-medium text-emerald-200 hover:text-emerald-100"
-                    >
-                      View Roster
-                      <ArrowRight className="h-3 w-3" />
-                    </Link>
+                    <div className="text-center">
+                      <span className="text-sm text-white/80">
+                        {team.match_wins || 0}-{team.match_losses || 0}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-sm text-white/80">
+                        {team.map_wins || 0}-{team.map_losses || 0}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <span className={`text-sm font-medium ${
+                        team.round_differential > 0 
+                          ? 'text-emerald-200' 
+                          : team.round_differential < 0 
+                          ? 'text-rose-200' 
+                          : 'text-white/60'
+                      }`}>
+                        {team.round_differential > 0 ? '+' : ''}{team.round_differential || 0}
+                      </span>
+                    </div>
                   </motion.div>
                 ))}
               </div>

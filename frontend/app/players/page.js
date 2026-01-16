@@ -18,11 +18,12 @@ export default function PlayersPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [showInactive, setShowInactive] = useState(false)
   const [selectedTeam, setSelectedTeam] = useState('all')
+  const [selectedYear, setSelectedYear] = useState(2026)
 
   useEffect(() => {
     async function fetchPlayers() {
       try {
-        const data = await fetchJson('/api/players')
+        const data = await fetchJson(`/api/players?year=${selectedYear}`)
         setPlayers(data)
       } catch (error) {
         console.error(error)
@@ -31,7 +32,7 @@ export default function PlayersPage() {
       }
     }
     fetchPlayers()
-  }, [])
+  }, [selectedYear])
 
   // Get unique teams for filter
   const allTeams = useMemo(() => {
@@ -125,6 +126,24 @@ export default function PlayersPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/60">Year:</span>
+              <div className="flex items-center gap-1">
+                {[2024, 2025, 2026].map((year) => (
+                  <button
+                    key={year}
+                    onClick={() => setSelectedYear(year)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                      selectedYear === year
+                        ? 'border border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                        : 'border border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                    }`}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-white/60">Team:</span>
               <select

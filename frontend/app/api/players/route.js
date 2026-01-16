@@ -7,8 +7,10 @@ import { isShowmatchTeam, normalizeTeamName } from '@/app/lib/team-utils.js';
 import { getPlayerLastMatchDate, getPlayerTeams } from '@/app/lib/db/activity.js';
 import { getTeamLogoUrl } from '@/app/lib/logos.js';
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const year = searchParams.get('year') || '2026'; // Default to 2026
     // Get all players with all their teams
     const allPlayerData = db.prepare(`
       SELECT DISTINCT 
@@ -60,16 +62,20 @@ export async function GET() {
         getPlayerLastMatchDate(db, player.player_name);
       const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
 
-      // Get player statistics
+      // Get player statistics for the specified year
       const stats = db.prepare(`
         SELECT 
-          AVG(rating) as avg_rating,
-          AVG(kills) as avg_kills,
-          AVG(assists) as avg_assists,
-          COUNT(DISTINCT map_id) as maps_played
-        FROM Player_Stats
-        WHERE player = ?
-      `).get(player.player_name);
+          AVG(ps.rating) as avg_rating,
+          AVG(ps.kills) as avg_kills,
+          AVG(ps.assists) as avg_assists,
+          COUNT(DISTINCT ps.map_id) as maps_played
+        FROM Player_Stats ps
+        JOIN Maps mp ON ps.map_id = mp.id
+        JOIN Matches m ON mp.match_id = m.match_id
+        WHERE ps.player = ?
+          AND m.match_date >= ?
+          AND m.match_date < ?
+      `).get(player.player_name, `${year}-01-01`, `${parseInt(year) + 1}-01-01`);
 
       // If no valid teams remain after filtering (e.g., only showmatch teams), treat as Free Agent
       if (!mostRecentTeam) {

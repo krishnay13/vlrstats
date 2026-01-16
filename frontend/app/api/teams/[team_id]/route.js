@@ -11,6 +11,8 @@ import { getMatchesDateMeta, getMatchDateExpr, getMatchDateNonEmptyWhere } from 
 export async function GET(request, { params }) {
   try {
     const { team_id } = params;
+    const { searchParams } = new URL(request.url);
+    const year = searchParams.get('year') || '2026'; // Default to 2026
 
     // team_id is the encoded team name from the teams list
     const decodedName = decodeURIComponent(team_id);
@@ -67,7 +69,7 @@ export async function GET(request, { params }) {
       rows = db.prepare(sql).all(...queryParams);
     }
 
-    // Prefer the most recent series (match) that has player stats for this team
+    // Prefer the most recent series (match) that has player stats for this team in the selected year
     const latestMatch = db.prepare(
       `
       SELECT m.match_id
@@ -76,10 +78,12 @@ export async function GET(request, { params }) {
       JOIN Matches m ON mp.match_id = m.match_id
       WHERE LOWER(ps.team) IN (${placeholders})
         AND ps.player IS NOT NULL AND ps.player != ''
+        AND m.match_date >= ?
+        AND m.match_date < ?
       ORDER BY m.match_id DESC
       LIMIT 1
     `,
-    ).get(...variantsLower);
+    ).get(...variantsLower, `${year}-01-01`, `${parseInt(year) + 1}-01-01`);
 
     let currentRoster = [];
     if (latestMatch?.match_id) {

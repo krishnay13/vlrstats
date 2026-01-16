@@ -47,7 +47,7 @@ export function getRegionFromTeam(teamName) {
   const americasTeams = ['nrg', 'cloud9', 'c9', 'furia', 'loud', 'sentinels', '100 thieves', 
                          'leviatán', 'kru', 'kru esports', 'mibr', 'evil geniuses', 'eg',
                          'g2 esports', 'g2', 'luminosity', 'shopify rebellion', 'tsm',
-                         'fur esports', '2g esports', '2game esports'];
+                         'fur esports', '2g esports', '2game esports', 'envy', 'nv', 'team envy'];
   if (americasTeams.some(team => t.includes(team))) {
     return 'AMERICAS';
   }
@@ -201,6 +201,7 @@ export function inferTeamRegion(db, teamName) {
     'evil geniuses': 'AMERICAS', 'eg': 'AMERICAS', 'g2 esports': 'AMERICAS',
     'g2': 'AMERICAS', 'luminosity': 'AMERICAS', 'shopify rebellion': 'AMERICAS',
     'tsm': 'AMERICAS', 'moist moguls': 'AMERICAS', 'the guard': 'AMERICAS',
+    'envy': 'AMERICAS', 'nv': 'AMERICAS', 'team envy': 'AMERICAS',
     'fnatic': 'EMEA', 'navi': 'EMEA', 'natus vincere': 'EMEA',
     'team liquid': 'EMEA', 'tl': 'EMEA', 'team vitality': 'EMEA', 'vitality': 'EMEA',
     'karmine corp': 'EMEA', 'kc': 'EMEA', 'bbl': 'EMEA', 'fut': 'EMEA', 'apeks': 'EMEA',

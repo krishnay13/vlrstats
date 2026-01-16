@@ -12,13 +12,14 @@ export default function TeamDetailsPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selectedYear, setSelectedYear] = useState(2026)
 
   useEffect(() => {
     async function fetchTeamDetails() {
       try {
         let teamData
         try {
-          teamData = await fetchJson(`/api/teams/${params.team_id}`)
+          teamData = await fetchJson(`/api/teams/${params.team_id}?year=${selectedYear}`)
         } catch (err) {
           if (err?.message?.includes('404')) {
             setError('Team not found')
@@ -34,7 +35,7 @@ export default function TeamDetailsPage() {
       }
     }
     fetchTeamDetails()
-  }, [params.team_id])
+  }, [params.team_id, selectedYear])
 
   if (loading) {
     return (
@@ -124,9 +125,38 @@ export default function TeamDetailsPage() {
                 {totalPlayers} player{totalPlayers !== 1 ? 's' : ''} on this team
               </p>
             </div>
-            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
-              {totalPlayers} Players
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedYear(2024)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  selectedYear === 2024
+                    ? 'border border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                    : 'border border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+              >
+                2024
+              </button>
+              <button
+                onClick={() => setSelectedYear(2025)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  selectedYear === 2025
+                    ? 'border border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                    : 'border border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+              >
+                2025
+              </button>
+              <button
+                onClick={() => setSelectedYear(2026)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  selectedYear === 2026
+                    ? 'border border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                    : 'border border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+              >
+                2026
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 space-y-8">

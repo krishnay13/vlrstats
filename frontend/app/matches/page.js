@@ -392,11 +392,9 @@ export default function MatchesPage() {
         </motion.div>
 
         {(hasMasters || hasChampions) && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <h2 className="text-lg font-semibold text-white/80">International Events</h2>
             {Object.entries(mastersEvents).map(([eventName, event]) => {
-              const key = `masters-${eventName}`
-              const isExpanded = expandedEvents[key]
               const groupMatches = [...event.group].sort(
                 (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
               )
@@ -404,55 +402,123 @@ export default function MatchesPage() {
                 (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
               )
 
+              // Determine if any stage is expanded for this event
+              const groupKey = `masters-${eventName}-group`
+              const playoffKey = `masters-${eventName}-playoff`
+              const expandedStage = expandedEvents[groupKey] ? 'group' : expandedEvents[playoffKey] ? 'playoff' : null
+
               return (
                 <motion.div
                   key={eventName}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
+                  className="rounded-3xl border border-white/10 bg-white/5 p-5"
                 >
-                  <button
-                    onClick={() => toggleEvent(key)}
-                    className="flex w-full items-center justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent px-6 py-4 transition-all hover:from-white/10 group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <ChevronRight
-                        className={`h-5 w-5 transition-transform text-white/60 group-hover:text-white ${isExpanded ? 'rotate-90' : ''}`}
+                  <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+                    {event.logo ? (
+                      <img
+                        src={event.logo}
+                        alt={`${eventName} logo`}
+                        className="h-8 w-8 bg-white/5 object-contain"
                       />
-                      {event.logo ? (
-                        <img src={event.logo} alt={`${eventName} logo`} className="h-7 w-7 bg-white/5 object-contain" />
-                      ) : (
-                        <Calendar className="h-5 w-5 text-white/60 group-hover:text-emerald-200 transition-colors" />
-                      )}
-                      <div className="text-left">
-                        <h3 className="text-lg font-semibold text-white">{eventName}</h3>
-                        <p className="mt-0.5 text-xs text-white/50">
-                          {groupMatches.length + playoffMatches.length} matches
-                        </p>
-                      </div>
-                    </div>
-                    <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/70">
-                      {groupMatches.length + playoffMatches.length}
-                    </span>
-                  </button>
+                    ) : (
+                      <Calendar className="h-5 w-5 text-white/60" />
+                    )}
+                    <h3 className="text-lg font-semibold text-white">{eventName}</h3>
+                  </div>
 
-                  {isExpanded && (
-                    <div className="space-y-6 px-6 pb-6 pt-4">
-                      {groupMatches.length > 0 && (
-                        <div>
-                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group/Swiss Stage</h4>
-                          <MatchTable matches={groupMatches} />
+                  {expandedStage ? (
+                    <div className="mt-5">
+                      {expandedStage === 'group' ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20">
+                          <button
+                            onClick={() =>
+                              setExpandedEvents((prev) => ({
+                                ...prev,
+                                [groupKey]: false,
+                              }))
+                            }
+                            className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                          >
+                            <div className="text-left">
+                              <p className="text-sm font-semibold text-white">Swiss Stage</p>
+                              <p className="text-xs text-white/50">{groupMatches.length} matches</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 rotate-90 text-white/60 transition-transform" />
+                          </button>
+                          <div className="p-4">
+                            {groupMatches.length > 0 ? (
+                              <MatchTable matches={groupMatches} />
+                            ) : (
+                              <p className="text-sm text-white/50">No matches yet.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-white/10 bg-black/20">
+                          <button
+                            onClick={() =>
+                              setExpandedEvents((prev) => ({
+                                ...prev,
+                                [playoffKey]: false,
+                              }))
+                            }
+                            className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                          >
+                            <div className="text-left">
+                              <p className="text-sm font-semibold text-white">Playoffs</p>
+                              <p className="text-xs text-white/50">{playoffMatches.length} matches</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 rotate-90 text-white/60 transition-transform" />
+                          </button>
+                          <div className="p-4">
+                            {playoffMatches.length > 0 ? (
+                              <MatchTable matches={playoffMatches} />
+                            ) : (
+                              <p className="text-sm text-white/50">No matches yet.</p>
+                            )}
+                          </div>
                         </div>
                       )}
-                      {playoffMatches.length > 0 && (
-                        <div>
-                          <h4 className="mb-3 text-sm font-semibold text-white/70">Playoffs</h4>
-                          <MatchTable matches={playoffMatches} />
-                        </div>
-                      )}
-                      {groupMatches.length === 0 && playoffMatches.length === 0 && (
-                        <p className="text-sm text-white/50">No matches available yet.</p>
-                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/20">
+                        <button
+                          onClick={() =>
+                            setExpandedEvents((prev) => ({
+                              ...prev,
+                              [groupKey]: true,
+                              [playoffKey]: false,
+                            }))
+                          }
+                          className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                        >
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-white">Swiss Stage</p>
+                            <p className="text-xs text-white/50">{groupMatches.length} matches</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-white/60 transition-transform" />
+                        </button>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20">
+                        <button
+                          onClick={() =>
+                            setExpandedEvents((prev) => ({
+                              ...prev,
+                              [groupKey]: false,
+                              [playoffKey]: true,
+                            }))
+                          }
+                          className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                        >
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-white">Playoffs</p>
+                            <p className="text-xs text-white/50">{playoffMatches.length} matches</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-white/60 transition-transform" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </motion.div>
@@ -460,72 +526,130 @@ export default function MatchesPage() {
             })}
 
             {Object.entries(championsEvents).map(([eventName, event]) => {
-              const key = `champions-${eventName}`
-              const isExpanded = expandedEvents[key]
               const groupMatches = [...(event.group || [])].sort(
                 (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
               )
               const playoffMatches = [...(event.playoffs || [])].sort(
                 (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
               )
-              const allMatches = [...(event.matches || [])].sort(
-                (a, b) => (getMatchDate(a)?.getTime() || 0) - (getMatchDate(b)?.getTime() || 0)
-              )
-              const totalMatches = groupMatches.length + playoffMatches.length || allMatches.length
-              
+
+              // Determine if any stage is expanded for this event
+              const groupKey = `champions-${eventName}-group`
+              const playoffKey = `champions-${eventName}-playoff`
+              const expandedStage = expandedEvents[groupKey] ? 'group' : expandedEvents[playoffKey] ? 'playoff' : null
+
               return (
                 <motion.div
                   key={eventName}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
+                  className="rounded-3xl border border-white/10 bg-white/5 p-5"
                 >
-                  <button
-                    onClick={() => toggleEvent(key)}
-                    className="flex w-full items-center justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent px-6 py-4 transition-all hover:from-white/10 group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <ChevronRight
-                        className={`h-5 w-5 transition-transform text-white/60 group-hover:text-white ${isExpanded ? 'rotate-90' : ''}`}
+                  <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+                    {event.logo ? (
+                      <img
+                        src={event.logo}
+                        alt={`${eventName} logo`}
+                        className="h-8 w-8 bg-white/5 object-contain"
                       />
-                      {event.logo ? (
-                        <img src={event.logo} alt={`${eventName} logo`} className="h-7 w-7 bg-white/5 object-contain" />
+                    ) : (
+                      <Calendar className="h-5 w-5 text-white/60" />
+                    )}
+                    <h3 className="text-lg font-semibold text-white">{eventName}</h3>
+                  </div>
+
+                  {expandedStage ? (
+                    <div className="mt-5">
+                      {expandedStage === 'group' ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20">
+                          <button
+                            onClick={() =>
+                              setExpandedEvents((prev) => ({
+                                ...prev,
+                                [groupKey]: false,
+                              }))
+                            }
+                            className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                          >
+                            <div className="text-left">
+                              <p className="text-sm font-semibold text-white">Group Stage</p>
+                              <p className="text-xs text-white/50">{groupMatches.length} matches</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 rotate-90 text-white/60 transition-transform" />
+                          </button>
+                          <div className="p-4">
+                            {groupMatches.length > 0 ? (
+                              <MatchTable matches={groupMatches} />
+                            ) : (
+                              <p className="text-sm text-white/50">No matches yet.</p>
+                            )}
+                          </div>
+                        </div>
                       ) : (
-                        <Calendar className="h-5 w-5 text-white/60 group-hover:text-emerald-200 transition-colors" />
+                        <div className="rounded-2xl border border-white/10 bg-black/20">
+                          <button
+                            onClick={() =>
+                              setExpandedEvents((prev) => ({
+                                ...prev,
+                                [playoffKey]: false,
+                              }))
+                            }
+                            className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                          >
+                            <div className="text-left">
+                              <p className="text-sm font-semibold text-white">Playoffs</p>
+                              <p className="text-xs text-white/50">{playoffMatches.length} matches</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 rotate-90 text-white/60 transition-transform" />
+                          </button>
+                          <div className="p-4">
+                            {playoffMatches.length > 0 ? (
+                              <MatchTable matches={playoffMatches} />
+                            ) : (
+                              <p className="text-sm text-white/50">No matches yet.</p>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      <div className="text-left">
-                        <h3 className="text-lg font-semibold text-white">{eventName}</h3>
-                        <p className="mt-0.5 text-xs text-white/50">
-                          {totalMatches} match{totalMatches !== 1 ? 'es' : ''}
-                        </p>
-                      </div>
                     </div>
-                    <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/70">
-                      {totalMatches}
-                    </span>
-                  </button>
-                  {isExpanded && (
-                    <div className="space-y-6 px-6 pb-6 pt-4">
-                      {groupMatches.length > 0 && (
-                        <div>
-                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group/Swiss Stage</h4>
-                          <MatchTable matches={groupMatches} />
-                        </div>
-                      )}
-                      {playoffMatches.length > 0 && (
-                        <div>
-                          <h4 className="mb-3 text-sm font-semibold text-white/70">Playoffs</h4>
-                          <MatchTable matches={playoffMatches} />
-                        </div>
-                      )}
-                      {groupMatches.length === 0 && playoffMatches.length === 0 && allMatches.length > 0 && (
-                        <div>
-                          <MatchTable matches={allMatches} />
-                        </div>
-                      )}
-                      {groupMatches.length === 0 && playoffMatches.length === 0 && allMatches.length === 0 && (
-                        <p className="text-sm text-white/50">No matches available.</p>
-                      )}
+                  ) : (
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/20">
+                        <button
+                          onClick={() =>
+                            setExpandedEvents((prev) => ({
+                              ...prev,
+                              [groupKey]: true,
+                              [playoffKey]: false,
+                            }))
+                          }
+                          className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                        >
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-white">Group Stage</p>
+                            <p className="text-xs text-white/50">{groupMatches.length} matches</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-white/60 transition-transform" />
+                        </button>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20">
+                        <button
+                          onClick={() =>
+                            setExpandedEvents((prev) => ({
+                              ...prev,
+                              [groupKey]: false,
+                              [playoffKey]: true,
+                            }))
+                          }
+                          className="flex w-full items-center justify-between gap-2 border-b border-white/10 px-4 py-3"
+                        >
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-white">Playoffs</p>
+                            <p className="text-xs text-white/50">{playoffMatches.length} matches</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-white/60 transition-transform" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </motion.div>
