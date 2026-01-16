@@ -188,40 +188,31 @@ export async function GET(request) {
     let players = []
 
     if (useDateRange) {
-      // Compute Elo on-the-fly for 2026 (current year) and all-time
-      if (dateRange === '2026') {
-        teams = computeEloRatings(db, startDate, endDate, topTeams)
-          .map((team) => ({
-            ...team,
-            logo_url: getTeamLogoUrl(team.team, 'small'),
-          }))
-      } else {
-        // For 2024 and 2025, use pre-computed stored tables
-        const tableName = `Elo_${dateRange}`
-        if (tableExists(db, tableName)) {
-          try {
-            teams = db
-              .prepare(
-                `
-                SELECT team, rating, matches
-                FROM ${tableName}
-                ORDER BY rating DESC
-                LIMIT ?
-                `
-              )
-              .all(topTeams)
-              .map((team) => ({
-                ...team,
-                logo_url: getTeamLogoUrl(team.team, 'small'),
-              }))
-          } catch (error) {
-            teams = []
-          }
+      // Use pre-computed stored tables for all date ranges (2024, 2025, 2026)
+      const tableName = `Elo_${dateRange}`
+      if (tableExists(db, tableName)) {
+        try {
+          teams = db
+            .prepare(
+              `
+              SELECT team, rating, matches
+              FROM ${tableName}
+              ORDER BY rating DESC
+              LIMIT ?
+              `
+            )
+            .all(topTeams)
+            .map((team) => ({
+              ...team,
+              logo_url: getTeamLogoUrl(team.team, 'small'),
+            }))
+        } catch (error) {
+          teams = []
         }
       }
 
       // Get players from the corresponding table
-      const playerTableName = dateRange === '2026' ? 'Player_Elo_Current' : `Player_Elo_${dateRange}`
+      const playerTableName = `Player_Elo_${dateRange}`
       if (tableExists(db, playerTableName)) {
         try {
           players = db

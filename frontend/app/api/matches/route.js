@@ -28,9 +28,11 @@ export async function GET() {
         : 'ORDER BY match_id DESC';
 
     // Fetch completed matches only (exclude upcoming/TBD matches with NULL scores)
+    // Also exclude matches with upcoming timestamps (EST stored, add 5 hours for UTC comparison)
     const matches = db.prepare(`
       SELECT * FROM Matches 
       WHERE team_a_score IS NOT NULL AND team_b_score IS NOT NULL
+      AND (match_ts_utc IS NULL OR datetime(match_ts_utc, '+5 hours') < datetime('now'))
       ${orderBy}
     `).all();
     

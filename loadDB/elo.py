@@ -360,10 +360,13 @@ def compute_elo(
     cur = conn.cursor()
 
     # Build query with optional date filtering
+    # Exclude upcoming matches by checking if timestamp is in the future (add 5 hours for EST->UTC)
     query = """
         SELECT match_id, tournament, stage, match_type, match_name, team_a, team_b, team_a_score, team_b_score
         FROM Matches
         WHERE team_a IS NOT NULL AND team_b IS NOT NULL
+        AND team_a_score IS NOT NULL AND team_b_score IS NOT NULL
+        AND (match_ts_utc IS NULL OR datetime(match_ts_utc, '+5 hours') < datetime('now'))
     """
     params = []
     
@@ -586,16 +589,6 @@ def compute_elo(
         # Replace current snapshot with union of dynamic player ratings and seeds for all players in Player_Stats
         cur.execute("DELETE FROM Player_Elo_Current")
 
-        # Global average rating for seeding
-        cur.execute(
-            """
-            SELECT AVG(CASE WHEN rating > 0 THEN rating END)
-            FROM Player_Stats
-            """
-        )
-        row = cur.fetchone()
-        global_avg_rating = float(row[0]) if row and row[0] is not None else 1.0
-
         # Most recent team per player from Player_Stats (not most frequent)
         # Compute most frequent team for each player within the date range
         # This ensures players show their primary team for the specific time period
@@ -613,6 +606,20 @@ def compute_elo(
             
             if date_conditions:
                 date_where = " AND " + " AND ".join(date_conditions)
+        
+        # Global average rating for seeding (filtered by date range)
+        cur.execute(
+            f"""
+            SELECT AVG(CASE WHEN ps.rating > 0 THEN ps.rating END)
+            FROM Player_Stats ps
+            JOIN Matches m ON ps.match_id = m.match_id
+            WHERE 1=1
+            {date_where}
+            """,
+            date_params_team
+        )
+        row = cur.fetchone()
+        global_avg_rating = float(row[0]) if row and row[0] is not None else 1.0
         
         # Count team appearances for each player
         cur.execute(
@@ -635,15 +642,19 @@ def compute_elo(
                 most_team[player] = normalize_team(team)
 
         # Per-player averages and appearances for seeding
+        # Apply the same date filtering to only include players from matches in the date range
         cur.execute(
-            """
-            SELECT player,
-                   AVG(CASE WHEN rating > 0 THEN rating END) AS avg_rating,
-                   SUM(CASE WHEN rating IS NOT NULL THEN 1 ELSE 0 END) AS appearances
-            FROM Player_Stats
-            WHERE player IS NOT NULL
-            GROUP BY player
-            """
+            f"""
+            SELECT ps.player,
+                   AVG(CASE WHEN ps.rating > 0 THEN ps.rating END) AS avg_rating,
+                   SUM(CASE WHEN ps.rating IS NOT NULL THEN 1 ELSE 0 END) AS appearances
+            FROM Player_Stats ps
+            JOIN Matches m ON ps.match_id = m.match_id
+            WHERE ps.player IS NOT NULL
+            {date_where}
+            GROUP BY ps.player
+            """,
+            date_params_team
         )
         avg_rows = cur.fetchall()
         avg_map: dict[str, tuple[float|None,int]] = {p: (float(a) if a is not None else None, int(n) if n is not None else 0) for (p,a,n) in avg_rows}
@@ -689,14 +700,16 @@ def compute_elo_snapshots():
     Compute and store ELO snapshots for fixed date ranges (2024, 2025) and 
     recalculate for current year (2026) and all-time.
     Automatically called after ingestion to keep current year and all-time updated.
+    
+    NOTE: Historical years (2024, 2025) are NOT recomputed - their snapshots are preserved.
+    Only 2026 and all-time are recalculated when new matches are added.
     """
     if not os.path.exists(DB_PATH):
         raise SystemExit(f"DB not found at {DB_PATH}")
 
-    # Define date ranges: fixed years and current year
+    # Only recompute current year (2026) and all-time
+    # Historical years (2024, 2025) snapshots are preserved and not touched
     date_ranges = [
-        ('2024', '2024-01-01', '2024-12-31'),
-        ('2025', '2025-01-01', '2025-12-31'),
         ('2026', '2026-01-01', '2026-12-31'),
         (None, None, None),  # all-time
     ]
@@ -736,6 +749,7 @@ def compute_elo_snapshots():
         conn.close()
     
     print("\n✓ ELO snapshots completed successfully!")
+    print("  (Historical 2024 & 2025 snapshots preserved)")
 
 
 

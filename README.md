@@ -21,12 +21,19 @@ pip install -r requirements.txt
 
 ### 2. Ingest Matches
 
-#### Ingest Individual Matches
+#### Ingest Individual Matches (Easiest Method)
 ```bash
-# Ingest by match IDs or URLs from vlr.gg
-python -m loadDB.cli ingest 123456 123789
-python -m loadDB.cli ingest https://www.vlr.gg/123456 https://www.vlr.gg/123789
+# Ingest by match IDs from vlr.gg
+python -m loadDB.cli ingest 596398
+
+# Ingest by full URLs
+python -m loadDB.cli ingest https://www.vlr.gg/596398/loud-vs-cloud9-vct-2026-americas-kickoff-ur1
+
+# Ingest multiple matches at once
+python -m loadDB.cli ingest 596398 596399 596400
 ```
+
+**Note**: After ingestion, Elo ratings are automatically recalculated and stored for all years (2024, 2025, 2026, all-time).
 
 #### Scrape Tournament Matches
 ```bash
