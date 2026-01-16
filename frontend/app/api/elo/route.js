@@ -233,11 +233,11 @@ export async function GET(request) {
               logo_url: getTeamLogoUrl(team.team, 'small'),
             }))
         } catch (error) {
-          console.warn('Error fetching teams from Elo_Current:', error)
+          // Elo_Current table query failed, ignore
           teams = []
         }
       } else {
-        console.warn('Elo_Current table does not exist. Run: python -m loadDB.cli elo compute --save')
+        // Elo_Current table does not exist yet
       }
 
       // Check if Player_Elo_Current table exists
@@ -258,11 +258,11 @@ export async function GET(request) {
               team_logo: getTeamLogoUrl(player.team, 'small'),
             }))
         } catch (error) {
-          console.warn('Error fetching players from Player_Elo_Current:', error)
+          // Player_Elo_Current table query failed, ignore
           players = []
         }
       } else {
-        console.warn('Player_Elo_Current table does not exist. Run: python -m loadDB.cli elo compute --save')
+        // Player_Elo_Current table does not exist yet
       }
     }
 

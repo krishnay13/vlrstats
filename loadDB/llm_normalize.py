@@ -122,28 +122,3 @@ Respond in JSON format only:
         print(f"Batch LLM normalization failed: {e}")
         # Fallback: return original names
         return {name: name for name in team_names}
-
-
-if __name__ == '__main__':
-    # Test the normalization
-    from loadDB.aliases.teams import TEAM_ALIASES
-    
-    test_names = [
-        "100T",
-        "Gen G",
-        "Global eSports",
-        "2Game Esports",
-        "Kru",
-        "Team Vitality",
-        "Unknown New Team"
-    ]
-    
-    print("Testing individual normalization:")
-    for name in test_names:
-        normalized = normalize_team_with_llm(name, TEAM_ALIASES)
-        print(f"  {name} -> {normalized}")
-    
-    print("\nTesting batch normalization:")
-    batch_result = batch_normalize_teams(test_names, TEAM_ALIASES)
-    for original, normalized in batch_result.items():
-        print(f"  {original} -> {normalized}")

@@ -327,7 +327,6 @@ export default function MatchDetailsPage() {
                     const cleanName = cleanMapName(map.map_name || map.map)
                     const mapId = map.map_id || map.id
                     if (!mapId) {
-                      console.warn('Map missing id:', map)
                       return null
                     }
                     const team1Score = map.team1_score || map.team_a_score || 0
