@@ -2,5 +2,9 @@
   {
     "type": "sqlite",
     "path": "c:\\Users\\krish\\OneDrive\\Documents\\work\\vlrstats\\valorant_esports.db"
+  },
+  {
+    "type": "sqlite",
+    "path": "c:\\Users\\krish\\OneDrive\\Documents\\work\\vlrstats\\frontend\\valorant_esports.db"
   }
 ]

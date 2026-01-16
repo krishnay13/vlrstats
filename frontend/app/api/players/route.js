@@ -60,6 +60,17 @@ export async function GET() {
         getPlayerLastMatchDate(db, player.player_name);
       const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
 
+      // Get player statistics
+      const stats = db.prepare(`
+        SELECT 
+          AVG(rating) as avg_rating,
+          AVG(kills) as avg_kills,
+          AVG(assists) as avg_assists,
+          COUNT(DISTINCT map_id) as maps_played
+        FROM Player_Stats
+        WHERE player = ?
+      `).get(player.player_name);
+
       // If no valid teams remain after filtering (e.g., only showmatch teams), treat as Free Agent
       if (!mostRecentTeam) {
         return {
@@ -69,16 +80,27 @@ export async function GET() {
           is_inactive: isInactive,
           team_logo: null,
           region: 'UNKNOWN',
+          avg_rating: stats?.avg_rating || 0,
+          avg_kills: stats?.avg_kills || 0,
+          avg_assists: stats?.avg_assists || 0,
+          maps_played: stats?.maps_played || 0,
         };
       }
       
+      // Ensure team name is normalized for logo/region lookups
+      const normalizedTeamName = normalizeTeamName(mostRecentTeam.team_name);
+      
       return {
         player_name: player.player_name,
-        team_name: mostRecentTeam.team_name, // Most recent team for display
-        all_teams: validTeams.map(t => t.team_name), // All teams for backend
+        team_name: normalizedTeamName,
+        all_teams: validTeams.map(t => normalizeTeamName(t.team_name)),
         is_inactive: isInactive,
-        team_logo: getTeamLogoUrl(mostRecentTeam.team_name, 'small'),
-        region: inferTeamRegion(db, mostRecentTeam.team_name), // Add region for sorting
+        team_logo: getTeamLogoUrl(normalizedTeamName, 'small'),
+        region: inferTeamRegion(db, normalizedTeamName),
+        avg_rating: stats?.avg_rating || 0,
+        avg_kills: stats?.avg_kills || 0,
+        avg_assists: stats?.avg_assists || 0,
+        maps_played: stats?.maps_played || 0,
       };
     });
     

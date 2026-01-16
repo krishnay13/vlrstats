@@ -30,48 +30,123 @@ const TEAM_ALIASES = {
   'movistar koi(koi)': 'KOI',
   'movistar koi': 'KOI',
   'koi': 'KOI',
+  'mkoi': 'KOI',
 
-  // Other known aliases / shorthands
-  'g2': 'G2 Esports',
-  'tl': 'Team Liquid',
-  'fnc': 'FNATIC',
-  't1': 'T1',
-  'sen': 'Sentinels',
-  'rrq': 'Rex Regum Qeon',
-  'prx': 'Paper Rex',
-  'edg': 'EDward Gaming',
+  // Core teams
+  '100t': '100 Thieves',
+  '100 thieves': '100 Thieves',
+  'c9': 'Cloud9',
+  'cloud9': 'Cloud9',
   'drx': 'DRX',
-  'mibr': 'MIBR',
-  'xlg': 'Xi Lai Gaming',
-  'th': 'Team Heretics',
+  'g2': 'G2 Esports',
+  'ge': 'Global Esports',
+  'gening esports': 'Gen.G',
+  'genG': 'Gen.G',
+  'gen.g': 'Gen.G',
+  'gen': 'Gen.G',
+  'geng': 'Gen.G',
+  'global esports': 'Global Esports',
+  'globalesports': 'Global Esports',
   'gx': 'GIANTX',
-  'nrg': 'NRG',
   'loud': 'LOUD',
-  
-  // Additional team abbreviations from players list
+  'mibr': 'MIBR',
+  'nrg': 'NRG',
+  't1': 'T1',
+  'tl': 'Team Liquid',
+
+  // Full names
+  'fnc': 'FNATIC',
+  'fnatic': 'FNATIC',
+  'rrq': 'Rex Regum Qeon',
+  'rex regum qeon': 'Rex Regum Qeon',
+  'prx': 'Paper Rex',
+  'paper rex': 'Paper Rex',
+  'edg': 'EDward Gaming',
+  'edward gaming': 'EDward Gaming',
+  'xlg': 'Xi Lai Gaming',
+  'xi lai gaming': 'Xi Lai Gaming',
+  'th': 'Team Heretics',
+  'team heretics': 'Team Heretics',
+  'sen': 'Sentinels',
+  'sentinels': 'Sentinels',
+
+  // Regional/International teams
   '2g': '2G Esports',
+  '2g esports': '2G Esports',
+  '2game esports': '2G Esports',
+  '2game_esports': '2G Esports',
   'ag': 'All Gamers',
+  'all gamers': 'All Gamers',
   'apk': 'Apeks',
+  'apeks': 'Apeks',
   'bbl': 'BBL Esports',
+  'bbl esports': 'BBL Esports',
   'bld': 'Bleed Esports',
+  'bleed': 'Bleed Esports',
+  'bleed esports': 'Bleed Esports',
   'bme': 'BOOM Esports',
+  'boom esports': 'BOOM Esports',
+  'dfm': 'DetonatioN FocusMe',
+  'detonator': 'DetonatioN FocusMe',
+  'detonationfocusme': 'DetonatioN FocusMe',
+  'detonation focusme': 'DetonatioN FocusMe',
+  'detonationfocus': 'DetonatioN FocusMe',
   'drg': 'Dragon Ranger Gaming',
+  'dragon ranger gaming': 'Dragon Ranger Gaming',
+  'eg': 'Evil Geniuses',
+  'evil geniuses': 'Evil Geniuses',
+  'fpx': 'FunPlus Phoenix',
+  'funplus phoenix': 'FunPlus Phoenix',
+  'fur': 'Furia Esports',
+  'fur esports': 'Furia Esports',
+  'furia': 'Furia Esports',
+  'furia esports': 'Furia Esports',
+  'fut': 'FUT Esports',
+  'fut esports': 'FUT Esports',
+  'kc': 'Karmine Corp',
+  'karmine corp': 'Karmine Corp',
+  'karminecorp': 'Karmine Corp',
+  'karmine': 'Karmine Corp',
+  'krü': 'KRÜ Esports',
+  'kru esports': 'KRÜ Esports',
+  'lev': 'Leviatan',
+  'leviatan': 'Leviatan',
   'm8': 'Gentle Mates',
   'gentle mates': 'Gentle Mates',
   'gentle m8tes': 'Gentle Mates',
+  'navi': 'Natus Vincere',
+  'natus vincere': 'Natus Vincere',
   'nova': 'Nova Esports',
-  'ns': 'Nongshim Esports',
-  'nongshim': 'Nongshim Esports',
-  'nsr': 'Nongshim Esports',
+  'nova esports': 'Nova Esports',
+  'ns': 'Nongshim Redforce',
+  'nongshim': 'Nongshim Redforce',
+  'nsr': 'Nongshim Redforce',
+  'nongshim redforce': 'Nongshim Redforce',
+  'nsredforce': 'Nongshim Redforce',
+  'ns redforce': 'Nongshim Redforce',
+  'nongshimredforce': 'Nongshim Redforce',
+  'nongshim esports': 'Nongshim Redforce',
   'te': 'Trace Esports',
+  'trace esports': 'Trace Esports',
   'tec': 'TEC Esports',
-  'titan esports club': 'Titan Esports Club',
+  'tec esports': 'TEC Esports',
+  'titan esports club': 'TEC Esports',
+  'titan_esports_club_2025': 'TEC Esports',
   'tln': 'Talon Esports',
   'talon': 'Talon Esports',
+  'talon esports': 'Talon Esports',
   'ts': 'Team Secret',
   'team secret': 'Team Secret',
+  'tyl': 'Talon Esports',
+  'vit': 'Team Vitality',
+  'vitality': 'Team Vitality',
+  'team vitality': 'Team Vitality',
   'wol': 'Wolves',
   'wolves': 'Wolves',
+  '2game_esports': '2G Esports',
+  '2game esports': '2G Esports',
+  'zeta': 'ZETA DIVISION',
+  'zeta division': 'ZETA DIVISION',
 };
 
 // Showmatch teams to filter out
@@ -91,6 +166,31 @@ const SHOWMATCH_TEAMS = [
   'pure aim',
   'precise defeat',
 ];
+
+/**
+ * Get all possible name variants for a team (includes aliases and canonical)
+ * @param {string} canonicalName - The canonical team name
+ * @returns {string[]} - Array of all possible variants (lowercase)
+ */
+export function getTeamNameVariants(canonicalName) {
+  const variants = new Set();
+  const canonical = normalizeTeamName(canonicalName);
+  
+  // Add the canonical name
+  variants.add(canonical.toLowerCase().trim());
+  
+  // Add the original name (in case it's not an alias key)
+  variants.add(canonicalName.toLowerCase().trim());
+  
+  // Find all alias keys that map to this canonical name
+  for (const [aliasKey, aliasValue] of Object.entries(TEAM_ALIASES)) {
+    if (aliasValue.toLowerCase().trim() === canonical.toLowerCase().trim()) {
+      variants.add(aliasKey.toLowerCase().trim());
+    }
+  }
+  
+  return Array.from(variants);
+}
 
 /**
  * Normalize a team name using aliases

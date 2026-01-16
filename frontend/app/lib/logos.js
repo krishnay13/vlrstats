@@ -48,10 +48,14 @@ function deriveNameAndSize(filename) {
 
 const LOGO_ALIASES = {
   furia: ['furiaesports'],
+  titanclub: ['tec', 'tecesports', 'tec esports', 'titan esports club', 'titanesportsclub'],
+  fur: ['fur esports', 'furesports', 'furia', 'furia esports', 'furiaesports'],
   futbolist: ['fut', 'futbolistic', 'futbolistick'],
   teamheretics: ['heretics'],
   nongshimredforce: ['nsredforce', 'nongshim'],
   geng: ['gengesports', 'gengg', 'genge', 'gengesport'],
+  globalesports: ['global esports', 'globalesports'],
+  '2g': ['2g esports', '2gesports', '2game esports', '2game_esports', '2gameesports', 'twogame'],
   xilai: ['xlg', 'xilaigaming', 'xlgchina'],
   jdgaming: ['jdg', 'jdgaming', 'jdgteam'],
 }
@@ -62,6 +66,17 @@ const TEAM_LOGO_OVERRIDES = {
   },
   xilai: {
     small: '69px-XLG_China_2024_allmode.png',
+  },
+  titanclub: {
+    small: 'Titan_Esports_Club_2025_full_darkmode.png',
+  },
+  globalesports: {
+    small: '84px-Global_Esports_2020_allmode.png',
+  },
+  '2g': {
+    small: '600px-2GAME_Esports_2024_allmode.png',
+    default: '600px-2GAME_Esports_2024_allmode.png',
+    large: '600px-2GAME_Esports_2024_allmode.png',
   },
 }
 

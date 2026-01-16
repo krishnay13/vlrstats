@@ -95,10 +95,28 @@ def upsert_maps(conn: sqlite3.Connection, maps: list[tuple]) -> dict[tuple[int, 
     """
     cur = conn.cursor()
     lookup: dict[tuple[int, str], int] = {}
+    def clean_map_name(name: str | None) -> str:
+        if not name:
+            return 'Unknown'
+        import re
+        cleaned = name
+        # Remove leading numbers and hyphens/spaces
+        cleaned = re.sub(r"^\d+\s*-?\s*", "", cleaned)
+        # Remove '(pick)' and 'pick' suffixes or embedded tokens
+        cleaned = re.sub(r"\s*\(pick\)\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"pick", "", cleaned, flags=re.IGNORECASE)
+        # Remove timestamps like '12:45', optional AM/PM
+        cleaned = re.sub(r"\s*\d{1,2}:\d{2}\s*(AM|PM)?", "", cleaned, flags=re.IGNORECASE)
+        # Remove MapName:Number patterns like Haven:28 or Split:42
+        cleaned = re.sub(r":\d+$", "", cleaned, flags=re.IGNORECASE)
+        # Trim whitespace
+        cleaned = cleaned.strip()
+        # Fallback if empty
+        return cleaned or 'Unknown'
+
     for match_id, game_id, map_name, ta_score, tb_score in maps:
         # Ensure map_name is not None or empty
-        if not map_name or map_name == '':
-            map_name = 'Unknown'
+        map_name = clean_map_name(map_name)
         
         # Only validate non-negative scores (no upper limit - games can go 50+ rounds in overtime)
         if ta_score is not None and ta_score < 0:

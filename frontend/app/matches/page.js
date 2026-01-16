@@ -286,17 +286,10 @@ export default function MatchesPage() {
         event.originalNames.add(match.tournament)
         event.all.push(match)
         
-        if (isMasters) {
-          const bucket = isPlayoffsMatch(match) ? 'playoffs' : 'group'
-          event[bucket].push(match)
-        } else {
-          // For Champions, separate by stage
-          if (isPlayoffsMatch(match)) {
-            event.playoffs.push(match)
-          } else {
-            event.group.push(match)
-          }
-        }
+        // Better playoff detection
+        const isPlayoff = isPlayoffsMatch(match)
+        const bucket = isPlayoff ? 'playoffs' : 'group'
+        event[bucket].push(match)
         return
       }
       
@@ -390,7 +383,7 @@ export default function MatchesPage() {
             className="mb-4 flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
           >
             <ChevronRight className="h-4 w-4 rotate-180" />
-            Back to Years
+            Back to Year Selection
           </button>
           <h1 className="text-3xl font-semibold tracking-tight mb-2">VCT {selectedYear}</h1>
           <p className="text-sm text-white/60">
@@ -445,22 +438,21 @@ export default function MatchesPage() {
 
                   {isExpanded && (
                     <div className="space-y-6 px-6 pb-6 pt-4">
-                      <div>
-                        <h4 className="mb-3 text-sm font-semibold text-white/70">Group Stage</h4>
-                        {groupMatches.length > 0 ? (
+                      {groupMatches.length > 0 && (
+                        <div>
+                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group/Swiss Stage</h4>
                           <MatchTable matches={groupMatches} />
-                        ) : (
-                          <p className="text-sm text-white/50">No group stage matches yet.</p>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="mb-3 text-sm font-semibold text-white/70">Playoffs</h4>
-                        {playoffMatches.length > 0 ? (
+                        </div>
+                      )}
+                      {playoffMatches.length > 0 && (
+                        <div>
+                          <h4 className="mb-3 text-sm font-semibold text-white/70">Playoffs</h4>
                           <MatchTable matches={playoffMatches} />
-                        ) : (
-                          <p className="text-sm text-white/50">No playoff matches yet.</p>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                      {groupMatches.length === 0 && playoffMatches.length === 0 && (
+                        <p className="text-sm text-white/50">No matches available yet.</p>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -516,7 +508,7 @@ export default function MatchesPage() {
                     <div className="space-y-6 px-6 pb-6 pt-4">
                       {groupMatches.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group Stage</h4>
+                          <h4 className="mb-3 text-sm font-semibold text-white/70">Group/Swiss Stage</h4>
                           <MatchTable matches={groupMatches} />
                         </div>
                       )}

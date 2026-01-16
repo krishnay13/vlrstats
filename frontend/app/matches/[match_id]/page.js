@@ -7,10 +7,16 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Trophy, MapPin, TrendingUp } from 'lucide-react'
 import { fetchJson } from '@/app/lib/api'
 
-// Helper function to clean map names
+// Helper function to clean map names - remove leading numbers, 'pick', timestamps, etc.
 function cleanMapName(mapName) {
   if (!mapName) return mapName
-  return mapName.replace(/^\d+/, '')
+  let cleaned = mapName
+    .replace(/^\d+\s*-?\s*/, '')  // Remove leading numbers
+    .replace(/\s*\(pick\)/gi, '')  // Remove (pick)
+    .replace(/\s*pick\s*$/gi, '')  // Remove trailing 'pick'
+    .replace(/\s*\d{1,2}:\d{2}\s*(AM|PM)?/gi, '')  // Remove timestamps
+    .trim()
+  return cleaned
 }
 
 // Helper function to group stats by team
@@ -161,18 +167,24 @@ export default function MatchDetailsPage() {
                   <img
                     src={match.team1_logo}
                     alt={`${match.team1_name} logo`}
-                    className="h-6 w-6 bg-white/5 object-contain"
+                    className="h-8 w-8 bg-white/5 object-contain"
                   />
                 ) : null}
                 {match.team1_name}
               </span>
-              <span className="mx-2 text-white/40">vs</span>
+              <span className={`mx-3 text-xl font-bold ${winner === 1 ? 'text-emerald-200' : winner === 2 ? 'text-white' : 'text-white/60'}`}>
+                {match.team1_score}
+              </span>
+              <span className="mx-2 text-white/40">-</span>
+              <span className={`mx-3 text-xl font-bold ${winner === 2 ? 'text-emerald-200' : winner === 1 ? 'text-white' : 'text-white/60'}`}>
+                {match.team2_score}
+              </span>
               <span className="inline-flex items-center gap-2">
                 {match.team2_logo ? (
                   <img
                     src={match.team2_logo}
                     alt={`${match.team2_name} logo`}
-                    className="h-6 w-6 bg-white/5 object-contain"
+                    className="h-8 w-8 bg-white/5 object-contain"
                   />
                 ) : null}
                 {match.team2_name}
@@ -228,6 +240,12 @@ export default function MatchDetailsPage() {
                 {match.team1_score}
               </div>
               <div className="text-sm font-semibold text-white/80">{match.team1_name}</div>
+              <Link
+                href={`/teams/${encodeURIComponent(match.team1_name)}`}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition-all hover:border-emerald-300/40 hover:bg-emerald-500/10 hover:text-emerald-200"
+              >
+                View Roster
+              </Link>
             </motion.div>
             <motion.div
               initial={{ scale: 0.9 }}
@@ -248,6 +266,12 @@ export default function MatchDetailsPage() {
                 {match.team2_score}
               </div>
               <div className="text-sm font-semibold text-white/80">{match.team2_name}</div>
+              <Link
+                href={`/teams/${encodeURIComponent(match.team2_name)}`}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition-all hover:border-emerald-300/40 hover:bg-emerald-500/10 hover:text-emerald-200"
+              >
+                View Roster
+              </Link>
             </motion.div>
           </div>
         </div>
@@ -281,28 +305,35 @@ export default function MatchDetailsPage() {
           <div className="space-y-4">
             {maps.length > 0 && (
               <>
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-sm font-medium text-white/70">Select Map:</label>
-                  <select
-                    value={selectedMapId?.toString() || ''}
-                    onChange={(event) => setSelectedMapId(parseInt(event.target.value, 10))}
-                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white shadow-[0_0_18px_rgba(0,0,0,0.25)] focus:outline-none"
-                  >
-                    <option value="" disabled>Select a map</option>
-                    {maps.map((map) => {
-                      const cleanName = cleanMapName(map.map_name || map.map)
-                      const mapId = map.map_id || map.id
-                      if (!mapId) {
-                        console.warn('Map missing id:', map)
-                        return null
-                      }
-                      return (
-                        <option key={mapId} value={mapId.toString()}>
-                          {cleanName} ({map.team1_score || map.team_a_score || 0}-{map.team2_score || map.team_b_score || 0})
-                        </option>
-                      )
-                    }).filter(Boolean)}
-                  </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  {maps.map((map) => {
+                    const cleanName = cleanMapName(map.map_name || map.map)
+                    const mapId = map.map_id || map.id
+                    if (!mapId) {
+                      console.warn('Map missing id:', map)
+                      return null
+                    }
+                    const team1Score = map.team1_score || map.team_a_score || 0
+                    const team2Score = map.team2_score || map.team_b_score || 0
+                    const isSelected = selectedMapId === mapId
+                    return (
+                      <button
+                        key={mapId}
+                        type="button"
+                        onClick={() => setSelectedMapId(mapId)}
+                        className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                          isSelected
+                            ? 'border-emerald-300/40 bg-emerald-500/20 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                            : 'border-white/20 bg-white/5 text-white/80 hover:border-white/30 hover:bg-white/10'
+                        }`}
+                      >
+                        {cleanName}
+                        <span className="ml-2 text-xs opacity-70">
+                          {team1Score}-{team2Score}
+                        </span>
+                      </button>
+                    )
+                  }).filter(Boolean)}
                 </div>
 
                 {selectedMap && (() => {
@@ -358,7 +389,7 @@ export default function MatchDetailsPage() {
 
                         {unknownStats.length > 0 && (
                           <div>
-                            <h4 className="mb-2 text-sm font-semibold text-white/50">Other</h4>
+                            <h4 className="mb-2 text-sm font-semibold text-white/70">Unassigned Players</h4>
                             <StatsTable rows={unknownStats} />
                           </div>
                         )}
@@ -386,10 +417,20 @@ export default function MatchDetailsPage() {
             <div className="mt-4 space-y-4">
               {(() => {
                 const { team1Stats, team2Stats, unknownStats } = groupStatsByTeam(
-                  playerStats,
+                  playerStats || [],
                   match.team1_name,
                   match.team2_name
                 )
+
+                const hasStats = team1Stats.length > 0 || team2Stats.length > 0 || unknownStats.length > 0
+
+                if (!hasStats) {
+                  return (
+                    <div className="py-8 text-center text-white/60">
+                      No match totals available. Stats are shown per map above.
+                    </div>
+                  )
+                }
 
                 return (
                   <>
@@ -409,7 +450,7 @@ export default function MatchDetailsPage() {
 
                     {unknownStats.length > 0 && (
                       <div>
-                        <h4 className="mb-2 text-sm font-semibold text-white/50">Other</h4>
+                        <h4 className="mb-2 text-sm font-semibold text-white/70">Unassigned Players</h4>
                         <StatsTable rows={unknownStats} />
                       </div>
                     )}

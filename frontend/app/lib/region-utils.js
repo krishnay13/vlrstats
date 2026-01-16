@@ -46,27 +46,32 @@ export function getRegionFromTeam(teamName) {
   // Known Americas teams
   const americasTeams = ['nrg', 'cloud9', 'c9', 'furia', 'loud', 'sentinels', '100 thieves', 
                          'leviatán', 'kru', 'kru esports', 'mibr', 'evil geniuses', 'eg',
-                         'g2 esports', 'g2', 'luminosity', 'shopify rebellion', 'tsm'];
+                         'g2 esports', 'g2', 'luminosity', 'shopify rebellion', 'tsm',
+                         'fur esports', '2g esports', '2game esports'];
   if (americasTeams.some(team => t.includes(team))) {
     return 'AMERICAS';
   }
   
   // Known EMEA teams
   const emeaTeams = ['fnatic', 'navi', 'natus vincere', 'team liquid', 'tl', 'vitality', 
-                     'karmine corp', 'kc', 'bbl', 'fut', 'giants', 'bds', 'th', 'gentle mates'];
+                     'karmine corp', 'kc', 'bbl', 'fut', 'giants', 'bds', 'th', 'gentle mates',
+                     'apeks'];
   if (emeaTeams.some(team => t.includes(team))) {
     return 'EMEA';
   }
   
   // Known APAC teams
   const apacTeams = ['zeta division', 'zeta', 't1', 'gen.g', 'geng', 'drx', 'talon', 
-                     'team secret', 'global esports', 'paper rex', 'prx', 'bleed', 'rex regum qeon', 'rrq'];
+                     'team secret', 'global esports', 'paper rex', 'prx', 'bleed', 'rex regum qeon', 'rrq',
+                     'boom esports', 'detonator', 'dfm', 'detonationfocusme', 'trace esports'];
   if (apacTeams.some(team => t.includes(team))) {
     return 'APAC';
   }
   
   // Known China teams
-  const chinaTeams = ['edward gaming', 'edg', 'funplus phoenix', 'fpx', 'bilibili gaming', 'blg'];
+  const chinaTeams = ['edward gaming', 'edg', 'funplus phoenix', 'fpx', 'bilibili gaming', 'blg',
+                      'dragon ranger gaming', 'jdg esports', 'nova esports', 'tec esports',
+                      'wolves', 'xi lai gaming', 'all gamers'];
   if (chinaTeams.some(team => t.includes(team))) {
     return 'CHINA';
   }
@@ -189,6 +194,7 @@ export function inferTeamRegion(db, teamName) {
   // Known team regions database (from region-detector)
   const knownTeamRegions = {
     'nrg': 'AMERICAS', 'cloud9': 'AMERICAS', 'c9': 'AMERICAS', 'furia': 'AMERICAS',
+    'furia esports': 'AMERICAS', '2g esports': 'AMERICAS', '2game esports': 'AMERICAS',
     'loud': 'AMERICAS', 'sentinels': 'AMERICAS', '100 thieves': 'AMERICAS',
     'leviatán': 'AMERICAS', 'leviatan': 'AMERICAS', 'kru': 'AMERICAS',
     'kru esports': 'AMERICAS', 'krü esports': 'AMERICAS', 'mibr': 'AMERICAS',
@@ -196,22 +202,44 @@ export function inferTeamRegion(db, teamName) {
     'g2': 'AMERICAS', 'luminosity': 'AMERICAS', 'shopify rebellion': 'AMERICAS',
     'tsm': 'AMERICAS', 'moist moguls': 'AMERICAS', 'the guard': 'AMERICAS',
     'fnatic': 'EMEA', 'navi': 'EMEA', 'natus vincere': 'EMEA',
-    'team liquid': 'EMEA', 'tl': 'EMEA', 'vitality': 'EMEA',
-    'karmine corp': 'EMEA', 'kc': 'EMEA', 'bbl': 'EMEA', 'fut': 'EMEA',
+    'team liquid': 'EMEA', 'tl': 'EMEA', 'team vitality': 'EMEA', 'vitality': 'EMEA',
+    'karmine corp': 'EMEA', 'kc': 'EMEA', 'bbl': 'EMEA', 'fut': 'EMEA', 'apeks': 'EMEA',
     'giants': 'EMEA', 'bds': 'EMEA', 'th': 'EMEA', 'team heretics': 'EMEA',
     'gentle mates': 'EMEA', 'koi': 'EMEA', 'movistar koi': 'EMEA',
     'giantx': 'EMEA', 'gx': 'EMEA',
     'zeta division': 'APAC', 'zeta': 'APAC', 't1': 'APAC',
-    'gen.g': 'APAC', 'geng': 'APAC', 'drx': 'APAC', 'talon': 'APAC',
+    'gen.g': 'APAC', 'geng': 'APAC', 'global esports': 'APAC', 'drx': 'APAC', 'talon': 'APAC',
     'team secret': 'APAC', 'global esports': 'APAC', 'paper rex': 'APAC',
     'prx': 'APAC', 'bleed': 'APAC', 'rex regum qeon': 'APAC', 'rrq': 'APAC',
+    'boom esports': 'APAC', 'detonation focusme': 'APAC', 'dfm': 'APAC',
+    'nongshim redforce': 'APAC', 'trace esports': 'APAC', 'tec esports': 'CHINA',
     'edward gaming': 'CHINA', 'edg': 'CHINA', 'funplus phoenix': 'CHINA',
-    'fpx': 'CHINA', 'bilibili gaming': 'CHINA', 'blg': 'CHINA',
+    'fpx': 'CHINA', 'bilibili gaming': 'CHINA', 'blg': 'CHINA', 'dragon ranger gaming': 'CHINA',
+    'jdg esports': 'CHINA', 'nova esports': 'CHINA', 'wolves': 'CHINA', 'xi lai gaming': 'CHINA',
+    'all gamers': 'CHINA',
   };
   
-  // Check known teams first
+  // Check known teams first (normalized lookup)
   if (knownTeamRegions[normalized]) {
     return knownTeamRegions[normalized];
+  }
+  
+  // Also check with canonical names that might come from database
+  // Map canonical forms to lowercase keys for lookup
+  const canonicalToLower = {
+    '2g esports': '2g esports',
+    'detonation focusme': 'detonation focusme',
+    'karmine corp': 'karmine corp',
+    'nongshim redforce': 'nongshim redforce',
+    'team vitality': 'team vitality',
+    'tec esports': 'tec esports',
+    'furia esports': 'furia esports',
+    'global esports': 'global esports',
+  };
+  
+  const lowerKey = canonicalToLower[normalized] || normalized;
+  if (knownTeamRegions[lowerKey]) {
+    return knownTeamRegions[lowerKey];
   }
   
   // Check partial matches

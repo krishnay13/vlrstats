@@ -23,24 +23,58 @@ export async function GET(request, { params }) {
     const mapsWithStats = maps.map((map) => {
       // Maps table uses 'id' as primary key, not 'map_id'
       const mapId = map.id;
-      const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE map_id = ?').all(mapId);
+      // Preserve insertion order to keep team assignment by index stable
+      const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE map_id = ? ORDER BY rowid').all(mapId);
 
       // Player_Stats table uses 'player' (string) directly, not player_id
       // Just ensure we have the right field names
-      const playerStatsWithNames = playerStats.map((stat) => {
-        return { 
+      const team1Name = normalizeTeamName(match.team_a || match.team1_name);
+      const team2Name = normalizeTeamName(match.team_b || match.team2_name);
+
+      // Assign team by index (first 5 -> team1, next 5 -> team2),
+      // fallback to normalized stat.team when available,
+      // and handle rare 6th man by balancing assignments.
+      let t1Count = 0;
+      let t2Count = 0;
+      const playerStatsWithNames = playerStats.map((stat, idx) => {
+        const player_name = stat.player || 'Unknown';
+        const normalizedStatTeam = stat.team ? normalizeTeamName(stat.team) : null;
+        let team_name = null;
+
+        if (normalizedStatTeam === team1Name) {
+          team_name = team1Name; t1Count++;
+        } else if (normalizedStatTeam === team2Name) {
+          team_name = team2Name; t2Count++;
+        } else if (idx < 5) {
+          team_name = team1Name; t1Count++;
+        } else if (idx < 10) {
+          team_name = team2Name; t2Count++;
+        } else {
+          // Assign extra players to the team with fewer assigned so far
+          if (t1Count <= t2Count) { team_name = team1Name; t1Count++; }
+          else { team_name = team2Name; t2Count++; }
+        }
+
+        return {
           ...stat,
-          player_name: stat.player || 'Unknown',
-          team_name: stat.team || null
+          player_name,
+          team_name,
         };
       });
 
       // Clean map name - remove leading numbers
-      const cleanMapName = map.map ? map.map.replace(/^\d+/, '') : map.map;
+      const cleanMapName = map.map
+        ? map.map
+            .replace(/^\d+\s*-?\s*/, '')
+            .replace(/\s*\(pick\)/gi, '')
+            .replace(/pick/gi, '')
+            .replace(/\s*\d{1,2}:\d{2}\s*(AM|PM)?/gi, '')
+            .replace(/:\d+$/i, '')
+            .trim()
+        : map.map;
       
       // Get team names from match for display
-      const team1Name = normalizeTeamName(match.team_a || match.team1_name);
-      const team2Name = normalizeTeamName(match.team_b || match.team2_name);
+      // team names already computed above
 
       return { 
         ...map, 
@@ -57,15 +91,35 @@ export async function GET(request, { params }) {
     });
 
     // Fetch player stats for match totals (where map_id is NULL)
-    const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE match_id = ? AND map_id IS NULL').all(match_id);
+    const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE match_id = ? AND map_id IS NULL ORDER BY rowid').all(match_id);
 
     // Replace player IDs with player names and team names in match totals
     // Player_Stats table uses 'player' (string) directly, not player_id
-    const playerStatsWithNames = playerStats.map((stat) => {
-      return { 
+    // Apply same assignment logic for totals (if present)
+    let t1Total = 0;
+    let t2Total = 0;
+    const playerStatsWithNames = playerStats.map((stat, idx) => {
+      const player_name = stat.player || 'Unknown';
+      const normalizedStatTeam = stat.team ? normalizeTeamName(stat.team) : null;
+      let team_name = null;
+
+      if (normalizedStatTeam === matchTeam1) {
+        team_name = matchTeam1; t1Total++;
+      } else if (normalizedStatTeam === matchTeam2) {
+        team_name = matchTeam2; t2Total++;
+      } else if (idx < 5) {
+        team_name = matchTeam1; t1Total++;
+      } else if (idx < 10) {
+        team_name = matchTeam2; t2Total++;
+      } else {
+        if (t1Total <= t2Total) { team_name = matchTeam1; t1Total++; }
+        else { team_name = matchTeam2; t2Total++; }
+      }
+
+      return {
         ...stat,
-        player_name: stat.player || 'Unknown',
-        team_name: stat.team || null
+        player_name,
+        team_name,
       };
     });
 
