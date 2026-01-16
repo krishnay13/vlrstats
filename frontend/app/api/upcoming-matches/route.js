@@ -18,12 +18,14 @@ export async function GET() {
     }
 
     // Get current UTC time using SQLite's datetime function for accurate filtering
+    // NOTE: The timestamps in the database are stored in EST (UTC-5), so we need to adjust
+    // Add 5 hours to convert EST to UTC for proper comparison
     const sql = `
       SELECT *
       FROM Matches
       WHERE match_ts_utc IS NOT NULL 
-      AND match_ts_utc > datetime('now')
-      ORDER BY match_ts_utc ASC
+      AND datetime(match_ts_utc, '+5 hours') > datetime('now')
+      ORDER BY datetime(match_ts_utc, '+5 hours') ASC
       LIMIT 20
     `;
 

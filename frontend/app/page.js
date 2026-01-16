@@ -18,11 +18,14 @@ const formatMatchDate = (match) => {
 const formatMatchDateTime = (match) => {
   const raw = match.match_ts_utc || match.match_date
   if (!raw) return 'TBD'
-  const date = new Date(raw)
-  if (isNaN(date.getTime())) return raw
+  // The timestamps are stored in EST, so add 5 hours to convert to UTC before displaying in local timezone
+  const estDate = new Date(raw)
+  if (isNaN(estDate.getTime())) return raw
+  // Add 5 hours to convert EST to UTC
+  const utcDate = new Date(estDate.getTime() + 5 * 60 * 60 * 1000)
   // Display in user's local timezone
-  const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  const datePart = utcDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const timePart = utcDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
   return `${datePart} • ${timePart}`
 }
 
