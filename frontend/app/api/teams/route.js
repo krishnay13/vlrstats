@@ -72,17 +72,17 @@ export async function GET() {
         SELECT 
           COUNT(*) as total_matches,
           SUM(CASE 
-            WHEN (team_a = ? AND match_result = 'team_a_win') OR 
-                 (team_b = ? AND match_result = 'team_b_win') THEN 1 
+            WHEN LOWER(team_a) = LOWER(?) AND team_a_score > team_b_score THEN 1 
+            WHEN LOWER(team_b) = LOWER(?) AND team_b_score > team_a_score THEN 1 
             ELSE 0 
           END) as wins,
           SUM(CASE 
-            WHEN (team_a = ? AND match_result = 'team_b_win') OR 
-                 (team_b = ? AND match_result = 'team_a_win') THEN 1 
+            WHEN LOWER(team_a) = LOWER(?) AND team_a_score < team_b_score THEN 1 
+            WHEN LOWER(team_b) = LOWER(?) AND team_b_score < team_a_score THEN 1 
             ELSE 0 
           END) as losses
         FROM Matches
-        WHERE (team_a = ? OR team_b = ?)
+        WHERE (LOWER(team_a) = LOWER(?) OR LOWER(team_b) = LOWER(?))
           AND match_date >= '2026-01-01'
       `).get(teamName, teamName, teamName, teamName, teamName, teamName);
       
@@ -91,34 +91,40 @@ export async function GET() {
         SELECT 
           COUNT(*) as total_maps,
           SUM(CASE 
-            WHEN (team_a = ? AND team_a_score > team_b_score) OR 
-                 (team_b = ? AND team_b_score > team_a_score) THEN 1 
+              WHEN (LOWER(matches.team_a) = LOWER(?) AND maps.team_a_score > maps.team_b_score) OR 
+                (LOWER(matches.team_b) = LOWER(?) AND maps.team_b_score > maps.team_a_score) THEN 1 
             ELSE 0 
           END) as map_wins,
           SUM(CASE 
-            WHEN (team_a = ? AND team_a_score < team_b_score) OR 
-                 (team_b = ? AND team_b_score < team_a_score) THEN 1 
+              WHEN (LOWER(matches.team_a) = LOWER(?) AND maps.team_a_score < maps.team_b_score) OR 
+                (LOWER(matches.team_b) = LOWER(?) AND maps.team_b_score < maps.team_a_score) THEN 1 
             ELSE 0 
           END) as map_losses
-        FROM Matches
-        WHERE (team_a = ? OR team_b = ?)
-          AND match_date >= '2026-01-01'
+        FROM Maps maps
+        JOIN Matches matches ON maps.match_id = matches.match_id
+             WHERE (LOWER(matches.team_a) = LOWER(?) OR LOWER(matches.team_b) = LOWER(?))
+          AND matches.match_date >= '2026-01-01'
       `).get(teamName, teamName, teamName, teamName, teamName, teamName);
       
       // Calculate round differential for 2026
       const roundDiff = db.prepare(`
         SELECT 
-          SUM(CASE WHEN team_a = ? THEN team_a_score ELSE 0 END) as rounds_for_a,
-          SUM(CASE WHEN team_a = ? THEN team_b_score ELSE 0 END) as rounds_against_a,
-          SUM(CASE WHEN team_b = ? THEN team_b_score ELSE 0 END) as rounds_for_b,
-          SUM(CASE WHEN team_b = ? THEN team_a_score ELSE 0 END) as rounds_against_b
-        FROM Matches
-        WHERE (team_a = ? OR team_b = ?)
-          AND match_date >= '2026-01-01'
+          SUM(CASE 
+            WHEN LOWER(matches.team_a) = LOWER(?) THEN maps.team_a_score
+            WHEN LOWER(matches.team_b) = LOWER(?) THEN maps.team_b_score
+            ELSE 0 END) as rounds_for,
+          SUM(CASE 
+            WHEN LOWER(matches.team_a) = LOWER(?) THEN maps.team_b_score
+            WHEN LOWER(matches.team_b) = LOWER(?) THEN maps.team_a_score
+            ELSE 0 END) as rounds_against
+        FROM Maps maps
+        JOIN Matches matches ON maps.match_id = matches.match_id
+        WHERE (LOWER(matches.team_a) = LOWER(?) OR LOWER(matches.team_b) = LOWER(?))
+          AND matches.match_date >= '2026-01-01'
       `).get(teamName, teamName, teamName, teamName, teamName, teamName);
       
-      const roundsFor = (roundDiff?.rounds_for_a || 0) + (roundDiff?.rounds_for_b || 0);
-      const roundsAgainst = (roundDiff?.rounds_against_a || 0) + (roundDiff?.rounds_against_b || 0);
+      const roundsFor = roundDiff?.rounds_for || 0;
+      const roundsAgainst = roundDiff?.rounds_against || 0;
       const roundDifferential = roundsFor - roundsAgainst;
       
       return {

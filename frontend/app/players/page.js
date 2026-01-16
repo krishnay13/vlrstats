@@ -22,6 +22,7 @@ export default function PlayersPage() {
 
   useEffect(() => {
     async function fetchPlayers() {
+      setLoading(true)
       try {
         const data = await fetchJson(`/api/players?year=${selectedYear}`)
         setPlayers(data)
@@ -213,6 +214,7 @@ export default function PlayersPage() {
                 <th className="px-4 text-center">Avg Rating</th>
                 <th className="px-4 text-center">Avg K/Map</th>
                 <th className="px-4 text-center">Avg A/Map</th>
+                <th className="px-4 text-center">Avg FK/FD</th>
                 <th className="px-4 text-center">Maps</th>
                 <th className="px-4 text-center">Status</th>
               </tr>
@@ -273,6 +275,13 @@ export default function PlayersPage() {
                   <td className="px-4 py-3 text-center">
                     <span className="text-sm text-white/80">
                       {player.avg_assists ? player.avg_assists.toFixed(1) : '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-sm">
+                      <span className="text-emerald-300">{player.maps_played ? (player.total_first_kills / player.maps_played).toFixed(2) : '—'}</span>
+                      <span className="text-white/40"> / </span>
+                      <span className="text-red-300">{player.maps_played ? (player.total_first_deaths / player.maps_played).toFixed(2) : '—'}</span>
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">

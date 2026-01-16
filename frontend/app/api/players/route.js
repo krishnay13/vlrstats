@@ -56,11 +56,6 @@ export async function GET(request) {
       
       // Determine most recent valid team (if any)
       const mostRecentTeam = validTeams[0] || null; // getPlayerTeams already sorts by date DESC
-      
-      // Get last match date for inactivity check (fallback to global last match if no valid teams)
-      const lastMatchDate = (mostRecentTeam && mostRecentTeam.last_match_date) || 
-        getPlayerLastMatchDate(db, player.player_name);
-      const isInactive = lastMatchDate ? isOlderThanSixMonths(lastMatchDate, null) : false;
 
       // Get player statistics for the specified year
       const stats = db.prepare(`
@@ -68,6 +63,8 @@ export async function GET(request) {
           AVG(ps.rating) as avg_rating,
           AVG(ps.kills) as avg_kills,
           AVG(ps.assists) as avg_assists,
+          SUM(ps.first_kills) as total_first_kills,
+          SUM(ps.first_deaths) as total_first_deaths,
           COUNT(DISTINCT ps.map_id) as maps_played
         FROM Player_Stats ps
         JOIN Maps mp ON ps.map_id = mp.id
@@ -76,6 +73,10 @@ export async function GET(request) {
           AND m.match_date >= ?
           AND m.match_date < ?
       `).get(player.player_name, `${year}-01-01`, `${parseInt(year) + 1}-01-01`);
+
+      // Determine inactivity based on whether they played in the selected year
+      const hasPlayedInYear = stats?.maps_played > 0;
+      const isInactive = !hasPlayedInYear;
 
       // If no valid teams remain after filtering (e.g., only showmatch teams), treat as Free Agent
       if (!mostRecentTeam) {
@@ -89,6 +90,8 @@ export async function GET(request) {
           avg_rating: stats?.avg_rating || 0,
           avg_kills: stats?.avg_kills || 0,
           avg_assists: stats?.avg_assists || 0,
+          total_first_kills: stats?.total_first_kills || 0,
+          total_first_deaths: stats?.total_first_deaths || 0,
           maps_played: stats?.maps_played || 0,
         };
       }
@@ -106,6 +109,8 @@ export async function GET(request) {
         avg_rating: stats?.avg_rating || 0,
         avg_kills: stats?.avg_kills || 0,
         avg_assists: stats?.avg_assists || 0,
+        total_first_kills: stats?.total_first_kills || 0,
+        total_first_deaths: stats?.total_first_deaths || 0,
         maps_played: stats?.maps_played || 0,
       };
     });

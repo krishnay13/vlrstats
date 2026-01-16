@@ -46,11 +46,11 @@ def parse_player_row(row, match_id: int, game_id: str) -> Optional[Tuple]:
         game_id: Game/Map ID
     
     Returns:
-        Tuple of (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
+        Tuple of (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths)
         or None if row is invalid
     """
     cells = row.find_all('td')
-    if len(cells) < 7:
+    if len(cells) < 9:  # Increased to 9 to include FK and FD cells
         return None
     
     player_cell = cells[0]
@@ -110,7 +110,24 @@ def parse_player_row(row, match_id: int, game_id: str) -> Optional[Tuple]:
     deaths = _first_num(cells[5].get_text(), 0, as_int=True)
     assists = _first_num(cells[6].get_text(), 0, as_int=True)
     
-    return (match_id, game_id, player, team, agent or 'Unknown', rating, acs, kills, deaths, assists)
+    # Extract first kills and first deaths from mod-fb and mod-fd cells
+    # These are at cells[11] and cells[12] in the overview table
+    first_kills = 0
+    first_deaths = 0
+    
+    if len(cells) > 11:
+        # cells[11] should be mod-fb (first blood/kills)
+        fb_cell = cells[11]
+        if 'mod-fb' in fb_cell.get('class', []):
+            first_kills = _first_num(fb_cell.get_text(), 0, as_int=True)
+    
+    if len(cells) > 12:
+        # cells[12] should be mod-fd (first death)
+        fd_cell = cells[12]
+        if 'mod-fd' in fd_cell.get('class', []):
+            first_deaths = _first_num(fd_cell.get_text(), 0, as_int=True)
+    
+    return (match_id, game_id, player, team, agent or 'Unknown', rating, acs, kills, deaths, assists, first_kills, first_deaths)
 
 
 def extract_player_stats(soup: BeautifulSoup, match_id: int) -> List[Tuple]:
@@ -122,7 +139,7 @@ def extract_player_stats(soup: BeautifulSoup, match_id: int) -> List[Tuple]:
         match_id: Match ID
     
     Returns:
-        List of tuples: (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
+        List of tuples: (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths)
     """
     players_info = []
     
@@ -131,13 +148,26 @@ def extract_player_stats(soup: BeautifulSoup, match_id: int) -> List[Tuple]:
         if not game_id or game_id == 'all':
             continue
         
-        # Only process if we have a valid stats table
-        if not game_div.select('table.wf-table-inset tbody tr'):
+        # Find tables in this game div - look for both tbody tr and direct tr
+        tables = game_div.find_all('table', class_='wf-table-inset')
+        if not tables:
             continue
         
-        for row in game_div.select('table.wf-table-inset tbody tr'):
-            player_info = parse_player_row(row, match_id, game_id)
-            if player_info:
-                players_info.append(player_info)
+        for table in tables:
+            # Try tbody first, then direct tr
+            tbody = table.find('tbody')
+            if tbody:
+                rows = tbody.find_all('tr')
+            else:
+                rows = table.find_all('tr')
+            
+            # Skip header row if present
+            for row in rows:
+                # Check if this is a header row (has th elements)
+                if row.find('th'):
+                    continue
+                player_info = parse_player_row(row, match_id, game_id)
+                if player_info:
+                    players_info.append(player_info)
     
     return players_info

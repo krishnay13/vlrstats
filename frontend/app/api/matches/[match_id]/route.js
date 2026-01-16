@@ -18,6 +18,9 @@ export async function GET(request, { params }) {
 
     // Fetch maps associated with the match
     const maps = db.prepare('SELECT * FROM Maps WHERE match_id = ? ORDER BY game_id').all(match_id);
+    
+    const matchTeam1 = normalizeTeamName(match.team_a || match.team1_name);
+    const matchTeam2 = normalizeTeamName(match.team_b || match.team2_name);
 
     // For each map, fetch player stats
     const mapsWithStats = maps.map((map) => {
@@ -28,8 +31,8 @@ export async function GET(request, { params }) {
 
       // Player_Stats table uses 'player' (string) directly, not player_id
       // Just ensure we have the right field names
-      const team1Name = normalizeTeamName(match.team_a || match.team1_name);
-      const team2Name = normalizeTeamName(match.team_b || match.team2_name);
+      const team1Name = matchTeam1;
+      const team2Name = matchTeam2;
 
       // Assign team by index (first 5 -> team1, next 5 -> team2),
       // fallback to normalized stat.team when available,
@@ -93,6 +96,51 @@ export async function GET(request, { params }) {
     // Fetch player stats for match totals (where map_id is NULL)
     const playerStats = db.prepare('SELECT * FROM Player_Stats WHERE match_id = ? AND map_id IS NULL ORDER BY rowid').all(match_id);
 
+    // If no explicit match totals exist, compute aggregates from per-map stats
+    let matchTotalStats = playerStats;
+    if (matchTotalStats.length === 0 && mapsWithStats.length > 0) {
+      // Aggregate stats from all maps per player
+      const playerAggregates = new Map();
+      
+      mapsWithStats.forEach(map => {
+        (map.playerStats || []).forEach(stat => {
+          const key = `${stat.player}|${stat.team}`;
+          if (!playerAggregates.has(key)) {
+            playerAggregates.set(key, {
+              player: stat.player,
+              team: stat.team,
+              agent: stat.agent || 'Mixed',
+              rating: 0,
+              acs: 0,
+              kills: 0,
+              deaths: 0,
+              assists: 0,
+              first_kills: 0,
+              first_deaths: 0,
+              mapCount: 0
+            });
+          }
+          
+          const agg = playerAggregates.get(key);
+          agg.rating += stat.rating || 0;
+          agg.acs += stat.acs || 0;
+          agg.kills += stat.kills || 0;
+          agg.deaths += stat.deaths || 0;
+          agg.assists += stat.assists || 0;
+          agg.first_kills += stat.first_kills || 0;
+          agg.first_deaths += stat.first_deaths || 0;
+          agg.mapCount += 1;
+        });
+      });
+      
+      // Convert to array and calculate averages
+      matchTotalStats = Array.from(playerAggregates.values()).map(agg => ({
+        ...agg,
+        rating: agg.rating / agg.mapCount,
+        // Keep raw totals for acs/kills/deaths/assists (not averaged)
+      }));
+    }
+
     // Replace player IDs with player names and team names in match totals
     // Player_Stats table uses 'player' (string) directly, not player_id
     // Apply same assignment logic for totals (if present)
@@ -122,9 +170,6 @@ export async function GET(request, { params }) {
         team_name,
       };
     });
-
-    const matchTeam1 = normalizeTeamName(match.team_a || match.team1_name);
-    const matchTeam2 = normalizeTeamName(match.team_b || match.team2_name);
 
     return NextResponse.json({
       match: {

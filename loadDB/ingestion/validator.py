@@ -66,7 +66,12 @@ def validate_match_data(
         warnings.append("No player stats found for match")
     else:
         for player_info in players_info:
-            _, _, player, team, agent, rating, acs, kills, deaths, assists = player_info
+            # Handle both old (10-tuple) and new (12-tuple) formats
+            if len(player_info) == 12:
+                _, _, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths = player_info
+            else:
+                _, _, player, team, agent, rating, acs, kills, deaths, assists = player_info
+            
             if not player or player == 'Unknown':
                 warnings.append("Player with unknown name found")
             if rating < 0 or rating > 5:

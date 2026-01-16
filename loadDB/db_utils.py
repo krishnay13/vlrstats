@@ -150,11 +150,11 @@ def upsert_player_stats(conn: sqlite3.Connection, stats: list[tuple], map_lookup
     
     Args:
         conn: Database connection
-        stats: List of tuples (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
+        stats: List of tuples (match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths)
         map_lookup: Dictionary mapping (match_id, game_id) to map database id
     """
     cur = conn.cursor()
-    for match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists in stats:
+    for match_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths in stats:
         # Skip if player name is missing
         if not player or player == '' or player == 'Unknown':
             continue
@@ -192,11 +192,13 @@ def upsert_player_stats(conn: sqlite3.Connection, stats: list[tuple], map_lookup
         kills = max(0, int(kills)) if kills is not None else 0
         deaths = max(0, int(deaths)) if deaths is not None else 0
         assists = max(0, int(assists)) if assists is not None else 0
+        first_kills = max(0, int(first_kills)) if first_kills is not None else 0
+        first_deaths = max(0, int(first_deaths)) if first_deaths is not None else 0
         
         cur.execute(
             """
-            INSERT INTO Player_Stats (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO Player_Stats (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(match_id, map_id, player) DO UPDATE SET
                 team=COALESCE(excluded.team, Player_Stats.team),
                 agent=COALESCE(excluded.agent, Player_Stats.agent),
@@ -204,7 +206,9 @@ def upsert_player_stats(conn: sqlite3.Connection, stats: list[tuple], map_lookup
                 acs=COALESCE(excluded.acs, Player_Stats.acs),
                 kills=COALESCE(excluded.kills, Player_Stats.kills),
                 deaths=COALESCE(excluded.deaths, Player_Stats.deaths),
-                assists=COALESCE(excluded.assists, Player_Stats.assists)
+                assists=COALESCE(excluded.assists, Player_Stats.assists),
+                first_kills=COALESCE(excluded.first_kills, Player_Stats.first_kills),
+                first_deaths=COALESCE(excluded.first_deaths, Player_Stats.first_deaths)
             """,
-            (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists),
+            (match_id, map_id, game_id, player, team, agent, rating, acs, kills, deaths, assists, first_kills, first_deaths),
         )

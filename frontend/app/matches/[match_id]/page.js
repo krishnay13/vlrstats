@@ -38,6 +38,8 @@ function StatsTable({ rows }) {
             <th className="px-3 text-left">D</th>
             <th className="px-3 text-left">A</th>
             <th className="px-3 text-left">ACS</th>
+            <th className="px-3 text-left">FK</th>
+            <th className="px-3 text-left">FD</th>
             <th className="px-3 text-left">Rating</th>
           </tr>
         </thead>
@@ -55,6 +57,8 @@ function StatsTable({ rows }) {
               <td className="px-3 py-2 text-sm">{stat.deaths}</td>
               <td className="px-3 py-2 text-sm">{stat.assists}</td>
               <td className="px-3 py-2 text-sm">{stat.acs}</td>
+              <td className="px-3 py-2 text-sm text-emerald-300">{stat.first_kills || 0}</td>
+              <td className="px-3 py-2 text-sm text-red-300">{stat.first_deaths || 0}</td>
               <td className="px-3 py-2">
                 <span className={`rounded-full border px-2 py-0.5 text-xs ${
                   stat.rating >= 1.0
