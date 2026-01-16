@@ -597,18 +597,40 @@ def compute_elo(
         global_avg_rating = float(row[0]) if row and row[0] is not None else 1.0
 
         # Most recent team per player from Player_Stats (not most frequent)
-        # This ensures players who changed teams show up with their current team
+        # Compute most frequent team for each player within the date range
+        # This ensures players show their primary team for the specific time period
+        date_where = ""
+        date_params_team = []
+        
+        if start_date or end_date:
+            date_conditions = []
+            if start_date:
+                date_conditions.append("(m.match_date >= ? OR (m.match_date IS NULL AND m.match_ts_utc >= ?))")
+                date_params_team.extend([start_date, start_date])
+            if end_date:
+                date_conditions.append("(m.match_date <= ? OR (m.match_date IS NULL AND m.match_ts_utc <= ?))")
+                date_params_team.extend([end_date, end_date + "T23:59:59Z"])
+            
+            if date_conditions:
+                date_where = " AND " + " AND ".join(date_conditions)
+        
+        # Count team appearances for each player
         cur.execute(
-            """
-            SELECT player, team, match_id
-            FROM Player_Stats
-            WHERE player IS NOT NULL AND team IS NOT NULL
-            ORDER BY match_id DESC
-            """
+            f"""
+            SELECT ps.player, ps.team, COUNT(*) as count
+            FROM Player_Stats ps
+            JOIN Matches m ON ps.match_id = m.match_id
+            WHERE ps.player IS NOT NULL AND ps.team IS NOT NULL
+            {date_where}
+            GROUP BY ps.player, ps.team
+            ORDER BY ps.player, count DESC
+            """,
+            date_params_team
         )
-        player_team_rows = cur.fetchall()
+        
+        player_team_counts = cur.fetchall()
         most_team: dict[str, str] = {}
-        for player, team, match_id in player_team_rows:
+        for player, team, count in player_team_counts:
             if player and player not in most_team:
                 most_team[player] = normalize_team(team)
 
