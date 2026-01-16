@@ -7,11 +7,23 @@ import { Trophy, TrendingUp, Users, Calendar, ArrowRight, BarChart3, Sparkles, C
 import { fetchJson } from '@/app/lib/api'
 
 const formatMatchDate = (match) => {
-  const raw = match.match_date || match.match_ts_utc
+  const raw = match.match_ts_utc || match.match_date
   if (!raw) return 'TBD'
   const date = new Date(raw)
   if (isNaN(date.getTime())) return raw.substring(0, 10)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // Use local timezone automatically via Date object
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+const formatMatchDateTime = (match) => {
+  const raw = match.match_ts_utc || match.match_date
+  if (!raw) return 'TBD'
+  const date = new Date(raw)
+  if (isNaN(date.getTime())) return raw
+  // Display in user's local timezone
+  const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  return `${datePart} • ${timePart}`
 }
 
 const features = [
@@ -249,7 +261,7 @@ export default function HomePage() {
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-white/60">
                       <Clock className="h-3.5 w-3.5" />
-                      <span>{match.date_text || match.time_text || formatMatchDate(match)}</span>
+                      <span>{match.date_text || match.time_text || formatMatchDateTime(match)}</span>
                     </div>
                     {match.event_logo && (
                       <img

@@ -17,22 +17,17 @@ export async function GET() {
       return NextResponse.json([]);
     }
 
-    // Get current date in YYYY-MM-DD format
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-
-    // Query matches where date is in the future
-    // Use the date expression to handle both match_date and match_ts_utc
+    // Get current UTC time using SQLite's datetime function for accurate filtering
     const sql = `
       SELECT *
       FROM Matches
-      WHERE ${nonEmptyWhere}
-      AND ${dateExpr} > ?
-      ORDER BY ${dateExpr} ASC
+      WHERE match_ts_utc IS NOT NULL 
+      AND match_ts_utc > datetime('now')
+      ORDER BY match_ts_utc ASC
       LIMIT 20
     `;
 
-    const matches = db.prepare(sql).all(today);
+    const matches = db.prepare(sql).all();
 
     // Filter out showmatches and process matches
     const processedMatches = matches
