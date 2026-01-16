@@ -58,19 +58,27 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchUpcomingMatches() {
       try {
-        const data = await fetchJson('/api/vct-upcoming-matches')
-        setAllMatches(data || [])
-        setUpcomingMatches((data || []).slice(0, 5))
-      } catch (error) {
-        console.error('Failed to fetch upcoming matches:', error)
-        // Fallback to database matches
-        try {
-          const dbData = await fetchJson('/api/upcoming-matches')
-          setAllMatches(dbData || [])
-          setUpcomingMatches((dbData || []).slice(0, 5))
-        } catch (dbError) {
-          console.error('Failed to fetch database matches:', dbError)
+        // Try database first (faster, more reliable)
+        const dbData = await fetchJson('/api/upcoming-matches')
+        if (dbData && dbData.length > 0) {
+          setAllMatches(dbData)
+          setUpcomingMatches(dbData.slice(0, 8))
+          setMatchesLoading(false)
+          return
         }
+      } catch (error) {
+        console.error('Failed to fetch database matches:', error)
+      }
+      
+      // Fallback to live scrape if database is empty
+      try {
+        const data = await fetchJson('/api/vct-upcoming-matches')
+        if (data && data.length > 0) {
+          setAllMatches(data)
+          setUpcomingMatches(data.slice(0, 8))
+        }
+      } catch (error) {
+        console.error('Failed to fetch live upcoming matches:', error)
       } finally {
         setMatchesLoading(false)
       }
@@ -254,8 +262,18 @@ export default function HomePage() {
                   
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-5 w-5 rounded bg-white/10" />
-                      <span className="text-sm font-medium text-white">{match.team_a}</span>
+                      {match.team_a_logo ? (
+                        <img
+                          src={match.team_a_logo}
+                          alt={match.team_a}
+                          className="h-5 w-5 rounded object-contain"
+                        />
+                      ) : (
+                        <div className="h-5 w-5 rounded bg-white/10" />
+                      )}
+                      <span className={`text-sm font-medium ${match.team_a === 'TBD' ? 'text-white/60 italic' : 'text-white'}`}>
+                        {match.team_a}
+                      </span>
                     </div>
                     
                     <div className="flex items-center gap-2 text-xs text-white/40">
@@ -265,15 +283,25 @@ export default function HomePage() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <div className="h-5 w-5 rounded bg-white/10" />
-                      <span className="text-sm font-medium text-white">{match.team_b}</span>
+                      {match.team_b_logo ? (
+                        <img
+                          src={match.team_b_logo}
+                          alt={match.team_b}
+                          className="h-5 w-5 rounded object-contain"
+                        />
+                      ) : (
+                        <div className="h-5 w-5 rounded bg-white/10" />
+                      )}
+                      <span className={`text-sm font-medium ${match.team_b === 'TBD' ? 'text-white/60 italic' : 'text-white'}`}>
+                        {match.team_b}
+                      </span>
                     </div>
                   </div>
 
-                  {match.event_name && (
+                  {match.tournament && (
                     <div className="mt-4 pt-4 border-t border-white/5">
                       <p className="text-xs text-white/50 truncate">
-                        {match.event_name}
+                        {match.tournament}
                       </p>
                     </div>
                   )}
@@ -281,13 +309,13 @@ export default function HomePage() {
               </motion.div>
               ))}
             </div>
-            {allMatches.length > 5 && (
+            {allMatches.length > 8 && (
               <div className="mt-6 flex justify-center">
                 <button
                   onClick={() => setShowAll(!showAll)}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10"
                 >
-                  {showAll ? 'Show Less' : `View More (${allMatches.length - 5} more)`}
+                  {showAll ? 'Show Less' : `View More (${allMatches.length - 8} more)`}
                   <ArrowRight className={`h-4 w-4 transition-transform ${showAll ? 'rotate-90' : ''}`} />
                 </button>
               </div>

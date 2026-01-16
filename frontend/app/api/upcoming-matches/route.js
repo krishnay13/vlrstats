@@ -29,7 +29,7 @@ export async function GET() {
       WHERE ${nonEmptyWhere}
       AND ${dateExpr} > ?
       ORDER BY ${dateExpr} ASC
-      LIMIT 8
+      LIMIT 20
     `;
 
     const matches = db.prepare(sql).all(today);

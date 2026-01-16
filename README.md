@@ -56,13 +56,37 @@ python -m loadDB.cli upload-from-file tournament_matches.txt --tournament-type O
 - `VCT` - Valorant Champions Tour
 - `OFFSEASON` - Offseason tournaments
 
-### 3. Build Elo Ratings
+### 3. Populate Upcoming Matches (Next 20)
+
+The frontend displays upcoming matches that are stored in the `Matches` table. To populate the next 20 matches from the VCT 2026 Kickoff events:
+
+```bash
+# Scrape and populate the next 20 upcoming matches
+python -m loadDB.upcoming
+
+# This command:
+# - Fetches from 4 VCT 2026 Kickoff events (Americas, EMEA, Pacific, China)
+# - Collects match IDs and projected start times
+# - Stores TBD for unknown opponent names (can be revealed after ingestion)
+# - Upserts into the Matches table with null scores until completion
+# - Idempotent—safe to re-run periodically (e.g., every 30–60 minutes)
+
+# Run this regularly to keep the upcoming matches fresh on the homepage
+```
+
+### 4. Build Elo Ratings
 ```bash
 # Compute Elo (prints top teams). Use --save to persist snapshots/history
 python -m loadDB.cli elo compute --top 20 --save
 ```
 
-### 4. Display Rankings
+### 4. Build Elo Ratings
+```bash
+# Compute Elo (prints top teams). Use --save to persist snapshots/history
+python -m loadDB.cli elo compute --top 20 --save
+```
+
+### 5. Display Rankings
 ```bash
 python -m loadDB.cli show top-teams -n 20
 python -m loadDB.cli show top-players -n 20
@@ -70,12 +94,25 @@ python -m loadDB.cli show team-history "G2 Esports"
 python -m loadDB.cli show player-history "trent"
 ```
 
-### 5. Train ML Models
+### 5. Display Rankings
+```bash
+python -m loadDB.cli show top-teams -n 20
+python -m loadDB.cli show top-players -n 20
+python -m loadDB.cli show team-history "G2 Esports"
+python -m loadDB.cli show player-history "trent"
+```
+
+### 6. Train ML Models
 ```bash
 python -m analytics.train
 ```
 
-### 6. Run API Server
+### 6. Train ML Models
+```bash
+python -m analytics.train
+```
+
+### 7. Run API Server
 ```bash
 python app.py
 # Server runs on http://127.0.0.1:5000

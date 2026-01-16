@@ -27,8 +27,12 @@ export async function GET() {
         ? `ORDER BY ${dateExpr} DESC, match_id DESC`
         : 'ORDER BY match_id DESC';
 
-    // Fetch all matches - use unified date expression for sorting when possible
-    const matches = db.prepare(`SELECT * FROM Matches ${orderBy}`).all();
+    // Fetch completed matches only (exclude upcoming/TBD matches with NULL scores)
+    const matches = db.prepare(`
+      SELECT * FROM Matches 
+      WHERE team_a_score IS NOT NULL AND team_b_score IS NOT NULL
+      ${orderBy}
+    `).all();
     
     // Filter out showmatch teams and process matches
     const processedMatches = matches
