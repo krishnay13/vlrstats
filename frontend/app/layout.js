@@ -5,7 +5,7 @@ import Navigation from './components/navigation'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'VLR Stats - Valorant Esports Analytics',
+  title: 'VCT Pulse - Valorant Esports Analytics',
   description: 'Comprehensive statistics and analytics for Valorant esports matches, teams, and players',
 };
 

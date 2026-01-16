@@ -1,4 +1,4 @@
-# VLR Stats: Elo + ML System
+# VCT Pulse: Elo + ML System
 
 **Status**: 🚧 Fresh Start for 2025 VCT Season
 

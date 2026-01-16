@@ -31,17 +31,16 @@ export default function Navigation() {
           transition={{ delay: 0.2 }}
         >
           <Link href="/" className="flex items-center space-x-3">
-            <span className="relative inline-flex h-9 w-9 items-center justify-center">
+            <span className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl">
               <span className="absolute inset-0 rounded-xl bg-emerald-400/30 blur-md" />
-              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/40 bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
-                <svg className="h-5 w-5 text-emerald-200" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.5l5.5 3.44v6.62L12 18.5l-5.5-3.94V7.94L12 4.5z" />
-                  <path d="M12 8L9 10v4l3 2 3-2v-4l-3-2z" opacity="0.7" />
-                </svg>
-              </span>
+              <img 
+                src="/vctpulselogo.png" 
+                alt="VCT Pulse Logo" 
+                className="relative h-9 w-9 object-contain"
+              />
             </span>
             <span className="text-lg font-semibold tracking-wide bg-gradient-to-r from-emerald-100 to-teal-200 bg-clip-text text-transparent">
-              VCT Stats
+              VCT Pulse
             </span>
           </Link>
         </motion.div>

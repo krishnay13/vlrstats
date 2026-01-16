@@ -1,4 +1,4 @@
-# VLR Stats Frontend
+# VCT Pulse Frontend
 
 A modern, animated frontend for Valorant esports statistics built with Next.js, shadcn/ui, and Framer Motion.
 

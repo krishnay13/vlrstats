@@ -122,17 +122,12 @@ export default function HomePage() {
   const LogoMark = () => (
     <div className="relative inline-flex items-center justify-center">
       <div className="absolute inset-0 rounded-full bg-emerald-400/30 blur-2xl" />
-      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-500/10 text-emerald-200 shadow-[0_0_35px_rgba(16,185,129,0.45)]">
-        <div className="relative">
-          {/* Valorant V symbol */}
-          <svg className="h-8 w-8 text-emerald-200" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 22h20L12 2zm0 4.5L18.5 20H5.5L12 6.5z" />
-          </svg>
-          {/* Heartbeat pulse overlay */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Heart className="h-4 w-4 text-red-400 animate-pulse" style={{ animationDuration: '1s' }} />
-          </div>
-        </div>
+      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl overflow-hidden shadow-[0_0_35px_rgba(16,185,129,0.45)]">
+        <img 
+          src="/vctpulselogo.png" 
+          alt="VCT Pulse Logo" 
+          className="h-16 w-16 object-contain"
+        />
       </div>
     </div>
   )
