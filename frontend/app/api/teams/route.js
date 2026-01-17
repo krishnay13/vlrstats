@@ -40,6 +40,11 @@ export async function GET() {
     teamNames.forEach(team => {
       const normalized = normalizeTeamName(team.team_name);
       
+      // Skip TBD teams (placeholder for undetermined teams)
+      if (normalized.toLowerCase() === 'tbd') {
+        return;
+      }
+      
       // Skip showmatch teams
       if (isShowmatchTeam(normalized)) {
         return;
