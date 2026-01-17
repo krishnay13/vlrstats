@@ -94,13 +94,17 @@ python -m loadDB.cli ingest-next-completed
 
 # Skip data validation for faster ingestion
 python ingest_next_completed.py --no-validate
+
+# Reset pointer if you want to start from the earliest null-score upcoming match
+python ingest_next_completed.py --reset-pointer
 ```
 
 **How it works:**
-1. Queries the database for the earliest upcoming match that has been completed (has non-NULL scores)
-2. If found, automatically ingests the match from vlr.gg
-3. Elo ratings are automatically recalculated for all years after ingestion
-4. If no completed match is found, it informs you that all upcoming matches are still in progress
+1. Refreshes the upcoming list (by default) so newly announced matches are present
+2. Finds the earliest upcoming match with NULL scores, ordered by timestamp then match_id
+3. Ingests that match from vlr.gg and writes scores/stats
+4. Elo ratings are automatically recalculated for all years after ingestion
+5. Maintains a timestamp + match_id pointer so subsequent runs skip already-processed upcoming matches even if IDs are non-chronological
 
 **Typical workflow:**
 ```bash
@@ -111,7 +115,7 @@ python -m loadDB.upcoming
 python ingest_next_completed.py
 
 # 3. Repeat step 2 as each match in the upcoming list completes
-# → No need to manually find match IDs!
+# → Script picks the next NULL-score upcoming match automatically
 ```
 
 ### 4. Build Elo Ratings
