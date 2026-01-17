@@ -219,6 +219,7 @@ export default function MatchDetailsPage() {
   
   // Aggregate agents per player from all maps for match totals
   const playerAgentMap = new Map()
+  const allAgentsUsed = new Set()
   if (hasAgentData && maps) {
     maps.forEach(map => {
       map.playerStats?.forEach(stat => {
@@ -228,6 +229,7 @@ export default function MatchDetailsPage() {
             playerAgentMap.set(key, new Set())
           }
           playerAgentMap.get(key).add(stat.agent)
+          allAgentsUsed.add(stat.agent)
         }
       })
     })
@@ -236,10 +238,8 @@ export default function MatchDetailsPage() {
   // Find max agents any player used
   const maxAgentsPerPlayer = Math.max(1, ...Array.from(playerAgentMap.values()).map(agents => agents.size))
   
-  // Get unique agents from match totals for display
-  const uniqueAgents = hasAgentData && playerStats
-    ? [...new Set(playerStats.map(s => s.agent).filter(Boolean))].sort()
-    : []
+  // Get all unique agents used across all maps in the match
+  const uniqueAgents = hasAgentData ? Array.from(allAgentsUsed).sort() : []
   
   // Enhance playerStats with aggregated agents for match totals
   const enhancedPlayerStats = playerStats?.map(stat => {
@@ -529,25 +529,8 @@ export default function MatchDetailsPage() {
         {activeTab === 'totals' && (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
             <div className="border-b border-white/10 pb-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Match Totals</h3>
-                  <p className="text-xs text-white/50">Overall player statistics for the entire match</p>
-                </div>
-                {hasAgentData && uniqueAgents.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {uniqueAgents.map(agent => (
-                      <img
-                        key={agent}
-                        src={`/images/${agent.toLowerCase()}.png`}
-                        alt={agent}
-                        title={agent}
-                        className="h-6 w-6 rounded-sm object-contain opacity-80 hover:opacity-100 transition-opacity"
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <h3 className="text-lg font-semibold text-white">Match Totals</h3>
+              <p className="text-xs text-white/50">Overall player statistics for the entire match</p>
             </div>
             <div className="mt-4 space-y-4">
               {(() => {
