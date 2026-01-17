@@ -2,6 +2,8 @@
 
 import { NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
+import { normalizeTeamName } from '@/app/lib/team-utils.js'
+import { getTeamLogoUrl } from '@/app/lib/logos.js'
 
 async function fetchHTML(url) {
   const headers = {
@@ -132,11 +134,17 @@ async function scrapeEventMatches(eventUrl, eventName, eventLogo) {
       const isUpcomingMatch = !isCompleted && (dateText || timeText || containerText.toLowerCase().includes('upcoming'))
       
       if (isUpcomingMatch && team1 && team2 && team1 !== team2) {
+        // Normalize team names to canonical forms
+        const normalizedTeam1 = normalizeTeamName(team1)
+        const normalizedTeam2 = normalizeTeamName(team2)
+        
         seenMatchIds.add(matchId)
         matches.push({
           match_id: matchId,
-          team_a: team1,
-          team_b: team2,
+          team_a: normalizedTeam1,
+          team_b: normalizedTeam2,
+          team_a_logo: getTeamLogoUrl(normalizedTeam1, 'small'),
+          team_b_logo: getTeamLogoUrl(normalizedTeam2, 'small'),
           event_name: eventName,
           event_logo: eventLogo,
           date_text: dateText,
