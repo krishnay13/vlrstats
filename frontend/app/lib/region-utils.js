@@ -63,14 +63,15 @@ export function getRegionFromTeam(teamName) {
   // Known APAC teams
   const apacTeams = ['zeta division', 'zeta', 't1', 'gen.g', 'geng', 'drx', 'talon', 
                      'team secret', 'global esports', 'paper rex', 'prx', 'bleed', 'rex regum qeon', 'rrq',
-                     'boom esports', 'detonator', 'dfm', 'detonationfocusme', 'trace esports'];
+                     'boom esports', 'detonator', 'dfm', 'detonationfocusme'];
   if (apacTeams.some(team => t.includes(team))) {
     return 'APAC';
   }
   
   // Known China teams
   const chinaTeams = ['edward gaming', 'edg', 'funplus phoenix', 'fpx', 'bilibili gaming', 'blg',
-                      'dragon ranger gaming', 'jdg esports', 'nova esports', 'tec esports',
+                      'dragon ranger gaming', 'jdg esports', 'nova esports', 'titan esports club',
+                      'tyloo', 'tyloo esports', 'trace esports', 'trace',
                       'wolves', 'xi lai gaming', 'all gamers'];
   if (chinaTeams.some(team => t.includes(team))) {
     return 'CHINA';
@@ -213,7 +214,7 @@ export function inferTeamRegion(db, teamName) {
     'team secret': 'APAC', 'global esports': 'APAC', 'paper rex': 'APAC',
     'prx': 'APAC', 'bleed': 'APAC', 'rex regum qeon': 'APAC', 'rrq': 'APAC',
     'boom esports': 'APAC', 'detonation focusme': 'APAC', 'dfm': 'APAC',
-    'nongshim redforce': 'APAC', 'trace esports': 'APAC', 'tec esports': 'CHINA',
+    'nongshim redforce': 'APAC', 'trace esports': 'CHINA', 'tec esports': 'CHINA',
     'edward gaming': 'CHINA', 'edg': 'CHINA', 'funplus phoenix': 'CHINA',
     'fpx': 'CHINA', 'bilibili gaming': 'CHINA', 'blg': 'CHINA', 'dragon ranger gaming': 'CHINA',
     'jdg esports': 'CHINA', 'nova esports': 'CHINA', 'wolves': 'CHINA', 'xi lai gaming': 'CHINA',
