@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Users, User, Trophy, Zap } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, Users, User, Trophy, Zap, ChevronDown, X } from 'lucide-react'
 import { fetchJson } from '@/app/lib/api'
 
 export default function TeamDetailsPage() {
@@ -14,6 +14,7 @@ export default function TeamDetailsPage() {
   const [error, setError] = useState(null)
   const [selectedYear, setSelectedYear] = useState(2026)
   const [bansPicks, setBansPicks] = useState(null)
+  const [expandedMap, setExpandedMap] = useState(null)
 
   useEffect(() => {
     async function fetchTeamDetails() {
@@ -240,7 +241,7 @@ export default function TeamDetailsPage() {
               </div>
             )}
 
-      {/* Map Veto History */}
+      {/* Map Veto Tendencies */}
       {bansPicks && (bansPicks.bans.length > 0 || bansPicks.picks.length > 0) && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -250,7 +251,7 @@ export default function TeamDetailsPage() {
         >
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
             <h2 className="mb-1 flex items-center text-2xl font-semibold">
-              <Zap className="mr-2 h-5 w-5 text-emerald-200" />
+              <Zap className="mr-2 h-5 w-5 text-amber-200" />
               Map Veto Tendencies
             </h2>
             <p className="mb-4 text-sm text-white/60">
@@ -307,6 +308,133 @@ export default function TeamDetailsPage() {
                   <p className="text-sm text-white/50">No map picks in this period</p>
                 )}
               </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Map Winrates */}
+      {bansPicks && bansPicks.map_winrates && bansPicks.map_winrates.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-6"
+        >
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+            <h2 className="mb-1 flex items-center text-2xl font-semibold">
+              <Trophy className="mr-2 h-5 w-5 text-blue-200" />
+              Map Performance
+            </h2>
+            <p className="mb-6 text-sm text-white/60">
+              Click any map to view detailed match history
+            </p>
+
+            <div className="space-y-3">
+              {bansPicks.map_winrates.map((mapWR, index) => {
+                const isExpanded = expandedMap === mapWR.map;
+                const mapImageName = mapWR.map.toLowerCase().replace(/\s+/g, '-');
+                const mapImagePath = `/api/image?name=valorant-${mapImageName}-map.png`;
+                
+                return (
+                  <motion.div
+                    key={`map-${mapWR.map}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`group rounded-2xl border overflow-hidden transition-all relative ${
+                      isExpanded 
+                        ? 'border-blue-300/40' 
+                        : 'border-blue-300/20'
+                    }`}
+                    style={{
+                      backgroundImage: `url('${mapImagePath}')`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    {/* Overlay for background image */}
+                    <div className="absolute inset-0 bg-black/40" />
+
+                    <motion.button
+                      onClick={() => setExpandedMap(isExpanded ? null : mapWR.map)}
+                      className="w-full text-left relative transition-all"
+                    >
+                      {/* Content */}
+                      <div className="relative p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-white capitalize">{mapWR.map}</h3>
+                            <p className="text-xs text-white/60">{mapWR.total} maps</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className={`relative h-20 w-20 rounded-full border-4 flex items-center justify-center font-bold text-xl ${
+                              mapWR.winPercent >= 60 ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200' :
+                              mapWR.winPercent >= 40 ? 'border-blue-400 bg-blue-500/20 text-blue-200' :
+                              'border-red-400 bg-red-500/20 text-red-200'
+                            }`}>
+                              {mapWR.winPercent}%
+                            </div>
+                            <motion.div
+                              animate={{ rotate: isExpanded ? 180 : 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronDown className="h-5 w-5 text-blue-200" />
+                            </motion.div>
+                          </div>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="text-sm text-white/80">
+                          <span className="font-semibold text-white">{mapWR.wins}W - {mapWR.losses}L</span> ({mapWR.total} total)
+                        </div>
+                      </div>
+                    </motion.button>
+
+                    {/* Expanded Content */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="overflow-hidden border-t border-blue-300/20 relative"
+                        >
+                          <div className="relative p-4">
+                            <h4 className="text-sm font-semibold text-blue-200 mb-4">Match History</h4>
+                            {mapWR.matches && mapWR.matches.length > 0 ? (
+                              <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {mapWR.matches.map((match, idx) => (
+                                  <Link
+                                    key={`${mapWR.map}-match-${idx}`}
+                                    href={`/matches/${match.match_id}`}
+                                    className="block p-3 rounded-lg border border-blue-300/20 bg-blue-500/10 hover:bg-blue-500/20 transition-colors group/match"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm text-white/80 capitalize group-hover/match:text-white transition-colors">{match.opponent}</span>
+                                      <span className={`text-sm font-bold px-3 py-1 rounded-lg ${
+                                        match.result === 'W' 
+                                          ? 'bg-emerald-500/30 text-emerald-100' 
+                                          : 'bg-red-500/30 text-red-100'
+                                      }`}>
+                                        {match.result} {match.scoreline}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-white/50 mt-1">{match.date}</div>
+                                  </Link>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/50">No match data available</p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         </motion.div>

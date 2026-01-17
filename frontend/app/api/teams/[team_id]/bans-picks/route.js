@@ -94,21 +94,118 @@ export async function GET(request, { params }) {
         }
       }
     }
+
+    // Query map winrates with detailed match info for this team in the given year
+    const mapMatches = db.prepare(`
+      SELECT 
+        LOWER(m.map) as map_name,
+        mat.match_id,
+        mat.team_a,
+        mat.team_b,
+        m.team_a_score,
+        m.team_b_score,
+        mat.match_date,
+        CASE 
+          WHEN LOWER(mat.team_a) = LOWER(?) THEN mat.team_b
+          WHEN LOWER(mat.team_b) = LOWER(?) THEN mat.team_a
+          ELSE NULL
+        END as opponent,
+        CASE 
+          WHEN (LOWER(mat.team_a) = LOWER(?) AND m.team_a_score > m.team_b_score) OR 
+               (LOWER(mat.team_b) = LOWER(?) AND m.team_b_score > m.team_a_score) THEN 'W'
+          ELSE 'L'
+        END as result,
+        CASE 
+          WHEN LOWER(mat.team_a) = LOWER(?) THEN m.team_a_score
+          ELSE m.team_b_score
+        END as team_score,
+        CASE 
+          WHEN LOWER(mat.team_a) = LOWER(?) THEN m.team_b_score
+          ELSE m.team_a_score
+        END as opponent_score
+      FROM Maps m
+      JOIN Matches mat ON m.match_id = mat.match_id
+      WHERE (LOWER(mat.team_a) = LOWER(?) OR LOWER(mat.team_b) = LOWER(?))
+        AND mat.match_date >= ? AND mat.match_date < ?
+        AND m.map IS NOT NULL AND m.map != ''
+      ORDER BY LOWER(m.map), mat.match_date DESC
+    `).all(canonicalName, canonicalName, canonicalName, canonicalName, canonicalName, canonicalName, canonicalName, canonicalName, `${year}-01-01`, `${parseInt(year) + 1}-01-01`);
+
+    // Organize matches by map
+    const matchesByMap = new Map();
+    for (const match of mapMatches) {
+      if (!matchesByMap.has(match.map_name)) {
+        matchesByMap.set(match.map_name, []);
+      }
+      matchesByMap.get(match.map_name).push({
+        match_id: match.match_id,
+        date: match.match_date,
+        opponent: normalizeTeamName(match.opponent),
+        scoreline: `${match.team_score}-${match.opponent_score}`,
+        result: match.result
+      });
+    }
+
+    // Query map winrates for this team in the given year
+    const mapWinrates = db.prepare(`
+      SELECT 
+        LOWER(m.map) as map_name,
+        COUNT(*) as total_maps,
+        SUM(CASE 
+          WHEN (LOWER(mat.team_a) = LOWER(?) AND m.team_a_score > m.team_b_score) OR 
+               (LOWER(mat.team_b) = LOWER(?) AND m.team_b_score > m.team_a_score) THEN 1 
+          ELSE 0 
+        END) as wins
+      FROM Maps m
+      JOIN Matches mat ON m.match_id = mat.match_id
+      WHERE (LOWER(mat.team_a) = LOWER(?) OR LOWER(mat.team_b) = LOWER(?))
+        AND mat.match_date >= ? AND mat.match_date < ?
+        AND m.map IS NOT NULL AND m.map != ''
+      GROUP BY LOWER(m.map)
+      ORDER BY total_maps DESC, wins DESC
+    `).all(canonicalName, canonicalName, canonicalName, canonicalName, `${year}-01-01`, `${parseInt(year) + 1}-01-01`);
+
+    // Convert winrates to structured format with percentages
+    const mapWinratesByName = new Map();
+    for (const row of mapWinrates) {
+      const winPercent = row.total_maps > 0 ? Math.round((row.wins / row.total_maps) * 100) : 0;
+      mapWinratesByName.set(row.map_name, {
+        map: row.map_name,
+        wins: row.wins,
+        total: row.total_maps,
+        losses: row.total_maps - row.wins,
+        winPercent,
+        matches: matchesByMap.get(row.map_name) || []
+      });
+    }
     
     // Convert to arrays, sorted by count
     const bans = Array.from(bansCounts.entries())
-      .map(([map, count]) => ({ map, count }))
+      .map(([map, count]) => ({ 
+        map, 
+        count,
+        winrate: mapWinratesByName.get(map)
+      }))
       .sort((a, b) => b.count - a.count);
     
     const picks = Array.from(picksCounts.entries())
-      .map(([map, count]) => ({ map, count }))
+      .map(([map, count]) => ({ 
+        map, 
+        count,
+        winrate: mapWinratesByName.get(map)
+      }))
       .sort((a, b) => b.count - a.count);
+
+    // Get all maps with winrates (even ones not banned/picked)
+    const allMapWinrates = Array.from(mapWinratesByName.values())
+      .sort((a, b) => b.winPercent - a.winPercent);
 
     return NextResponse.json({
       team_name: canonicalName,
       year: parseInt(year),
       bans,
       picks,
+      map_winrates: allMapWinrates,
       total_matches_with_veto: matches.length,
     });
   } catch (error) {
