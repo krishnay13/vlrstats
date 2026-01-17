@@ -27,49 +27,115 @@ function groupStatsByTeam(stats, team1Name, team2Name) {
   return { team1Stats, team2Stats, unknownStats }
 }
 
-function StatsTable({ rows }) {
+function StatsTable({ rows, showAgents = false, maxAgentsPerPlayer = 1 }) {
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'desc' })
+
+  const handleSort = (key) => {
+    let direction = 'desc'
+    if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = 'asc'
+    }
+    setSortConfig({ key, direction })
+  }
+
+  const sortedRows = [...rows].sort((a, b) => {
+    if (!sortConfig.key) return 0
+    
+    const aVal = a[sortConfig.key] ?? 0
+    const bVal = b[sortConfig.key] ?? 0
+    
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+    return 0
+  })
+
+  const SortableHeader = ({ label, sortKey }) => (
+    <th 
+      className="px-3 text-left cursor-pointer hover:text-white transition-colors select-none"
+      onClick={() => handleSort(sortKey)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {sortConfig.key === sortKey && (
+          <span className="text-emerald-300">
+            {sortConfig.direction === 'asc' ? '↑' : '↓'}
+          </span>
+        )}
+      </div>
+    </th>
+  )
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
       <table className="w-full text-sm">
         <thead className="bg-white/5 text-xs uppercase tracking-wide text-white/60">
           <tr className="h-9">
             <th className="px-3 text-left">Player</th>
-            <th className="px-3 text-left">K</th>
-            <th className="px-3 text-left">D</th>
-            <th className="px-3 text-left">A</th>
-            <th className="px-3 text-left">ACS</th>
-            <th className="px-3 text-left">FK</th>
-            <th className="px-3 text-left">FD</th>
-            <th className="px-3 text-left">Rating</th>
+            <SortableHeader label="K" sortKey="kills" />
+            <SortableHeader label="D" sortKey="deaths" />
+            <SortableHeader label="A" sortKey="assists" />
+            <SortableHeader label="ACS" sortKey="acs" />
+            <SortableHeader label="FK" sortKey="first_kills" />
+            <SortableHeader label="FD" sortKey="first_deaths" />
+            <SortableHeader label="Rating" sortKey="rating" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((stat, index) => (
-            <motion.tr
-              key={stat.stat_id || `${stat.player_name}-${index}`}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.02 }}
-              className="h-9 border-b border-white/5 text-white/80 hover:bg-white/5"
-            >
-              <td className="px-3 py-2 text-sm font-medium text-white">{stat.player_name}</td>
-              <td className="px-3 py-2 text-sm">{stat.kills}</td>
-              <td className="px-3 py-2 text-sm">{stat.deaths}</td>
-              <td className="px-3 py-2 text-sm">{stat.assists}</td>
-              <td className="px-3 py-2 text-sm">{stat.acs}</td>
-              <td className="px-3 py-2 text-sm text-emerald-300">{stat.first_kills || 0}</td>
-              <td className="px-3 py-2 text-sm text-red-300">{stat.first_deaths || 0}</td>
-              <td className="px-3 py-2">
-                <span className={`rounded-full border px-2 py-0.5 text-xs ${
-                  stat.rating >= 1.0
-                    ? 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
-                    : 'border-white/10 bg-white/5 text-white/70'
-                }`}>
-                  {stat.rating?.toFixed(2) || 'N/A'}
-                </span>
-              </td>
-            </motion.tr>
-          ))}
+          {sortedRows.map((stat, index) => {
+            // Handle multiple agents per player (for match totals)
+            const agents = stat.agents || (stat.agent ? [stat.agent] : [])
+            const agentIcons = agents.map(agent => 
+              agent ? `/images/${agent.toLowerCase()}.png` : null
+            ).filter(Boolean)
+            
+            return (
+              <motion.tr
+                key={stat.stat_id || `${stat.player_name}-${index}`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.02 }}
+                className="h-9 border-b border-white/5 text-white/80 hover:bg-white/5"
+              >
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    {showAgents && (
+                      <div className="flex items-center gap-0.5">
+                        {agentIcons.map((icon, i) => (
+                          <img
+                            key={i}
+                            src={icon}
+                            alt={agents[i]}
+                            className="h-5 w-5 rounded-sm object-contain"
+                            title={agents[i]}
+                          />
+                        ))}
+                        {/* Padding with empty space for alignment */}
+                        {Array.from({ length: maxAgentsPerPlayer - agentIcons.length }).map((_, i) => (
+                          <div key={`pad-${i}`} className="h-5 w-5" />
+                        ))}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-white">{stat.player_name}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-sm">{stat.kills}</td>
+                <td className="px-3 py-2 text-sm">{stat.deaths}</td>
+                <td className="px-3 py-2 text-sm">{stat.assists}</td>
+                <td className="px-3 py-2 text-sm">{stat.acs}</td>
+                <td className="px-3 py-2 text-sm text-emerald-300">{stat.first_kills || 0}</td>
+                <td className="px-3 py-2 text-sm text-red-300">{stat.first_deaths || 0}</td>
+                <td className="px-3 py-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-xs ${
+                    stat.rating >= 1.0
+                      ? 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
+                      : 'border-white/10 bg-white/5 text-white/70'
+                  }`}>
+                    {stat.rating?.toFixed(2) || 'N/A'}
+                  </span>
+                </td>
+              </motion.tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -147,6 +213,42 @@ export default function MatchDetailsPage() {
   const { match, maps, playerStats } = data
   const winner = match.team1_score > match.team2_score ? 1 : match.team2_score > match.team1_score ? 2 : null
   const selectedMap = maps.find(m => (m.map_id || m.id) === selectedMapId) || (maps.length > 0 ? maps[0] : null)
+  
+  // Check if any player stats have agent data
+  const hasAgentData = playerStats?.some(s => s.agent) || maps?.some(m => m.playerStats?.some(s => s.agent))
+  
+  // Aggregate agents per player from all maps for match totals
+  const playerAgentMap = new Map()
+  if (hasAgentData && maps) {
+    maps.forEach(map => {
+      map.playerStats?.forEach(stat => {
+        if (stat.player && stat.agent) {
+          const key = stat.player
+          if (!playerAgentMap.has(key)) {
+            playerAgentMap.set(key, new Set())
+          }
+          playerAgentMap.get(key).add(stat.agent)
+        }
+      })
+    })
+  }
+  
+  // Find max agents any player used
+  const maxAgentsPerPlayer = Math.max(1, ...Array.from(playerAgentMap.values()).map(agents => agents.size))
+  
+  // Get unique agents from match totals for display
+  const uniqueAgents = hasAgentData && playerStats
+    ? [...new Set(playerStats.map(s => s.agent).filter(Boolean))].sort()
+    : []
+  
+  // Enhance playerStats with aggregated agents for match totals
+  const enhancedPlayerStats = playerStats?.map(stat => {
+    const agents = playerAgentMap.get(stat.player)
+    return {
+      ...stat,
+      agents: agents ? Array.from(agents).sort() : (stat.agent ? [stat.agent] : [])
+    }
+  }) || []
 
   return (
     <div className="container py-6 max-w-7xl">
@@ -392,21 +494,21 @@ export default function MatchDetailsPage() {
                         {team1Stats.length > 0 && (
                           <div>
                             <h4 className="mb-2 text-sm font-semibold text-emerald-200">{map.team1_name || match.team1_name}</h4>
-                            <StatsTable rows={team1Stats} />
+                            <StatsTable rows={team1Stats} showAgents={hasAgentData} />
                           </div>
                         )}
 
                         {team2Stats.length > 0 && (
                           <div>
                             <h4 className="mb-2 text-sm font-semibold text-white/80">{map.team2_name || match.team2_name}</h4>
-                            <StatsTable rows={team2Stats} />
+                            <StatsTable rows={team2Stats} showAgents={hasAgentData} />
                           </div>
                         )}
 
                         {unknownStats.length > 0 && (
                           <div>
                             <h4 className="mb-2 text-sm font-semibold text-white/70">Unassigned Players</h4>
-                            <StatsTable rows={unknownStats} />
+                            <StatsTable rows={unknownStats} showAgents={hasAgentData} />
                           </div>
                         )}
                       </div>
@@ -427,13 +529,30 @@ export default function MatchDetailsPage() {
         {activeTab === 'totals' && (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
             <div className="border-b border-white/10 pb-4">
-              <h3 className="text-lg font-semibold text-white">Match Totals</h3>
-              <p className="text-xs text-white/50">Overall player statistics for the entire match</p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Match Totals</h3>
+                  <p className="text-xs text-white/50">Overall player statistics for the entire match</p>
+                </div>
+                {hasAgentData && uniqueAgents.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {uniqueAgents.map(agent => (
+                      <img
+                        key={agent}
+                        src={`/images/${agent.toLowerCase()}.png`}
+                        alt={agent}
+                        title={agent}
+                        className="h-6 w-6 rounded-sm object-contain opacity-80 hover:opacity-100 transition-opacity"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="mt-4 space-y-4">
               {(() => {
                 const { team1Stats, team2Stats, unknownStats } = groupStatsByTeam(
-                  playerStats || [],
+                  enhancedPlayerStats || [],
                   match.team1_name,
                   match.team2_name
                 )
@@ -453,21 +572,21 @@ export default function MatchDetailsPage() {
                     {team1Stats.length > 0 && (
                       <div>
                         <h4 className="mb-2 text-sm font-semibold text-emerald-200">{match.team1_name}</h4>
-                        <StatsTable rows={team1Stats} />
+                        <StatsTable rows={team1Stats} showAgents={hasAgentData} maxAgentsPerPlayer={maxAgentsPerPlayer} />
                       </div>
                     )}
 
                     {team2Stats.length > 0 && (
                       <div>
                         <h4 className="mb-2 text-sm font-semibold text-white/80">{match.team2_name}</h4>
-                        <StatsTable rows={team2Stats} />
+                        <StatsTable rows={team2Stats} showAgents={hasAgentData} maxAgentsPerPlayer={maxAgentsPerPlayer} />
                       </div>
                     )}
 
                     {unknownStats.length > 0 && (
                       <div>
                         <h4 className="mb-2 text-sm font-semibold text-white/70">Unassigned Players</h4>
-                        <StatsTable rows={unknownStats} />
+                        <StatsTable rows={unknownStats} showAgents={hasAgentData} maxAgentsPerPlayer={maxAgentsPerPlayer} />
                       </div>
                     )}
                   </>
